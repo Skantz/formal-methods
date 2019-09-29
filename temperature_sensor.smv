@@ -1,37 +1,21 @@
---
--- Shuttle Digital Autopilot
---         by Sergey Berezin (berez@cs.cmu.edu)
---
-
 MODULE main
 
- VAR cpu_temperature: word[32];
-     sensor_temperature: word[32];
-       memory: array 0..2 of word[32];
+ VAR cpu_temperature: signed word[32];
+     sensor_temperature: signed word[32];
+       memory: array 0..2 of signed word[32];
        oldest:    {0, 1, 2};
        state:       {0,1,2,3,4,5};
-       sleep: word[1];
-
-
---VAR cont_3EO_start: boolean;
---    RTLS_abort_declared: boolean;
---    region_selected : boolean;
---    m_mode: {mm102, mm103, mm601};
---    r: {reg-1, reg0, reg1, reg2, reg3, reg102};
---    step : {1,2,3,4,5,6,7,8,9,10, exit, undef};
-
+       sleep: signed word[1];
 
 ASSIGN
- --init(memory[0]) := 0;
+ init(memory[0]) := 0sd32_0;
+ init(memory[1]) := 0sd32_0;
+ init(memory[2]) := 0sd32_0;
  init(oldest) := 0;
  init(state) := 0;
- init(sleep) := 0d1_0;
- init(cpu_temperature) := 0d32_0; 
- init(sensor_temperature) := 0d32_0;
-
-
-
-
+ init(sleep) := 0sd1_0;
+ init(cpu_temperature) := 0sd32_0; 
+ init(sensor_temperature) := 0sd32_0;
 
 
 next(state) :=
@@ -46,13 +30,13 @@ next(state) :=
 
 next(cpu_temperature) :=
   case state = 2 : sensor_temperature;
-       state = 4 : cpu_temperature + 0d32_273;
+       state = 4 : cpu_temperature + 0sd32_273;
   TRUE: cpu_temperature;
   esac;
 
 next(sleep) :=
-  case state = 1: 0d1_0;
-       state = 3: 0d1_1;
+  case state = 1: 0sd1_0;
+       state = 3: 0sd1_1;
        TRUE: sleep; 
   esac;
 
@@ -81,17 +65,18 @@ next(memory[2]) :=
   esac;
 
 
+
 -- Just after the ISR has terminated, the sensor is sleeping.
 
-SPEC AX(state = 5 -> sleep = 0d1_1);
+SPEC AX(state = 5 -> sleep = 0sd1_1);
 
 -- When the sensor is not sleeping, then the ISR is executed.
 
-LTLSPEC (sleep = 0d1_1 | state != 0) U (sleep = 0d1_1)
+LTLSPEC (sleep = 0sd1_1 | state != 0) U (sleep = 0sd1_1)
 
 -- If the ISR is not executed, then the sensor is sleeping.
 
-LTLSPEC (state = 0 | sleep = 0d1_1) U (state != 0)
+LTLSPEC (state = 0 | sleep = 0sd1_1) U (state != 0)
 
 -- When the ISR is not executed, then the value of memory at the previous value of oldest is equal to cpu.temperature.
 
@@ -107,18 +92,17 @@ SPEC AX(state = 5 & oldest = 2 -> memory[1] = cpu_temperature);
 
 -- When ISR is not executed, then cpu.temperature >= 173.
 
-SPEC AG (state = 0 -> cpu_temperature >= 0d32_173);
+LTLSPEC (state = 0 | cpu_temperature >= 0sd32_173) U (state != 0);
 
 -- When ISR has terminated, then cpu.temperature >= 173.
 
-SPEC AX(state = 5 -> cpu_temperature >= 0d32_173);
+SPEC AX(state = 5 -> cpu_temperature >= 0sd32_173);
 
 -- oldest is always in the set {0, 1, 2}.
 
 SPEC AG(oldest in {0,1,2});
 
-
 JUSTICE
-  (sensor_temperature >= -0d32_100) &
-  (sensor_temperature <= 0d32_100);
+  (sensor_temperature >= -0sd32_100) &
+  (sensor_temperature <= 0sd32_100);
 
