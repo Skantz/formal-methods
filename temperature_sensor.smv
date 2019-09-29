@@ -93,7 +93,7 @@ SPEC AX(state = 5 & oldest = 2 -> memory[1] = cpu_temperature);
 
 -- When ISR is not executed, then cpu.temperature >= 173.
 
-LTLSPEC (state = 0 | cpu_temperature >= 0sd32_173) U (state != 0);
+SPEC AG(state = 0 -> cpu_temperature >= 0sd32_173);
 
 -- When ISR has terminated, then cpu.temperature >= 173.
 
