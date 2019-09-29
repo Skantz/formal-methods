@@ -13,7 +13,7 @@ ASSIGN
  init(memory[2]) := 0sd32_0;
  init(oldest) := 0;
  init(state) := 0;
- init(sleep) := 0sd1_0;
+ init(sleep) := 0sd1_1;
  init(cpu_temperature) := 0sd32_0; 
  init(sensor_temperature) := 0sd32_0;
 
@@ -72,10 +72,11 @@ SPEC AX(state = 5 -> sleep = 0sd1_1);
 
 -- When the sensor is not sleeping, then the ISR is executed.
 
-LTLSPEC (sleep = 0sd1_1 | state != 0) U (sleep = 0sd1_1)
+SPEC AG (sleep = 0sd1_0 -> state != 0) -- state != 0) U (sleep = 0sd1_1)
 
 -- If the ISR is not executed, then the sensor is sleeping.
 
+SPEC AG (state = 0 -> sleep = 0sd1_1);
 LTLSPEC (state = 0 | sleep = 0sd1_1) U (state != 0)
 
 -- When the ISR is not executed, then the value of memory at the previous value of oldest is equal to cpu.temperature.
