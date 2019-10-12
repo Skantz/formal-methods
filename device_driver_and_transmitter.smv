@@ -1,13 +1,29 @@
-MODULE device_driver
+MODULE device_driver(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, turn, pa, length)
 VAR
   queue_head: word[2];
   queue_tail: word[2];
   new_bd: word[2];
-  open_state: {open_idle, open_set_reset, open_reset_test};
-  transmit_state: {transmit_idle, transmit_update_queue, transmit_bad_buffer_or_queue_full_or_not_queue_full,
+  --open_state: {open_idle, open_set_reset, open_reset_test};
+  transmit_state: {transmit_idle, transmit_start, transmit_update_queue, transmit_bad_buffer_or_queue_full_or_not_queue_full,
                    transmit_updated_new_bd, transmit_check_misqueue};
-  stop_state: {stop_idle, stop_set_teardown, stop_teardown_test};
+  stop_state: {stop_idle, stop_set_teardown, stop_teardown_test, stop_update_queue, stop_write_td};
   dead: boolean;
+
+DEFINE
+  HW_MEMORY_START := 0b2_01;
+  HW_MEMORY_END := 0b2_11;
+  RAM_START := 0b2_01;	
+  RAM_END := 0b2_10;
+TRANSMIT_OVERFLOW := pa + length < pa;
+TRANSMIT_LENGTH_EQ_ZERO := length = 0d2_0;
+
+TRANSMIT_INSIDE_RAM := RAM_START <= pa & pa + length - 0b2_01 <= RAM_END;
+TRANSMIT_QUEUE_FULL :=
+	(queue_head < queue_tail &
+	 queue_head = HW_MEMORY_START & queue_tail = HW_MEMORY_END) |
+	(queue_tail < queue_head & queue_tail + 0b2_01 = queue_head);
+TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL := TRANSMIT_OVERFLOW |
+	TRANSMIT_LENGTH_EQ_ZERO | !TRANSMIT_INSIDE_RAM | TRANSMIT_QUEUE_FULL;
 
 ASSIGN
   init(open_state) := open_idle;
@@ -17,35 +33,27 @@ ASSIGN
 
 
 next(open_state) := 
-  case open_state = open_state = open_idle & transmit_state = transmit_idle &
-                       next(transmit_state) = transmit_idle & stop_state = stop_idle &
-                       next(stop_state) = stop_idle & turn = software: 	open_set_reset union open_idle;
+  case open_state = open_idle & 
+                       --transmit_state = transmit_idle & next(transmit_state) = transmit_idle & 
+                       --stop_state = stop_idle & next(stop_state) = stop_idle &
+                       turn = software: {open_set_reset, open_idle};
        open_state = open_set_reset & turn = software: open_reset_test;
-       open_reset_test & RESET != 0b1_1 & turn = software: open_idle;
+       open_state = open_reset_test & RESET != 0b1_1 & turn = software: open_idle;
        TRUE: open_state;
   esac;
 
-next(RESET) :=
-  case open_state = open_set_reset & next(open_state) = open_reset_test & turn = software: 0b1_1;
-    open_state = open_set_reset: 0b1_1;
-    TRUE: RESET;
-  esac;
 
-next(HDP) := 
-  case open_state = open_reset_test & next(open_state) = open_idle & turn = software: 0b2_00;
-    transmit_bad_buffer_or_queue_full_or_not_full & HDP = 0b2_00: HW_MEMORY_START;
-    transmit_state = transmit_check_misqueue & HW_MEMORY_OWN[queue_tail] = 0b1_0 & HW_MEMORY_EOQ[queue_tail] = 0b1_1 & HW_MEMORY_NDP[queue_tail] != 0b2_00: new_bd;
-    open_state = open_reset_test: 0b2_00;
-    TRUE: HDP;
-  esac;
+
+
+ 
 
 next(queue_head) := 
   case open_state = open_reset_test & next(open_state) = open_idle & turn = software: 0b2_00;
-    queue_head != 0 & HW_MEMORY_OWN[queue_head] = 0b1_0: HW_MEMORY_NDP[queue_head];
-    transmit_state = transmit_bad_buffer_or_queue_full_or_not_full & HDP = 0b2_00: HW_MEMORY_START;    
+    queue_head != 0d2_0 & HW_MEMORY_OWN[queue_head] = 0b1_0: HW_MEMORY_NDP[queue_head];
+    transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & HDP = 0b2_00: HW_MEMORY_START;    
     transmit_state = transmit_check_misqueue & HW_MEMORY_OWN[queue_tail] = 0b1_0 & HW_MEMORY_EOQ[queue_tail] = 0b1_1 & HW_MEMORY_NDP[queue_tail] != 0b2_00: new_bd;
     open_state = open_reset_test: 0b2_00;
-    stop_state = stop_teardown_state: 0b2_00;
+    stop_state = stop_teardown_test: 0b2_00;
     stop_state = stop_teardown_test & next(stop_state) = stop_idle & turn = software: 0b2_00;
     TRUE: queue_head;
   esac;
@@ -53,8 +61,8 @@ next(queue_head) :=
 next(queue_tail) := 
   case open_state = open_reset_test & next(open_state) = open_idle & turn = software: 0b2_00;
     transmit_state = transmit_update_queue &  queue_head = 0b2_00: 0b2_00;
-    transmit_state = transmit_bad_buffer_or_queue_full_or_not_full & HDP = 0b2_00: HW_MEMORY_START;
-    transmit_case = transmit_check_misqueue: new_bd;
+    transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & HDP = 0b2_00: HW_MEMORY_START;
+    transmit_state = transmit_check_misqueue: new_bd;
     open_state = open_reset_test: 0b2_00;
     stop_state = stop_teardown_test: 0b2_00;
     stop_state = stop_update_queue & next(stop_state) = stop_idle & turn = software: 0b2_00;
@@ -62,61 +70,39 @@ next(queue_tail) :=
   esac;
 
 
-next(HW_MEMORY_NDP[HW_MEMORY_START]) :=
-  case transmit_bad_buffer_or_queue_full_or_not_full & HDP = 0b2_00: 0b2_00;
-
-    TRUE: HW_MEMORY_NDP[HW_MEMORY_START];
-  esac;
-
-next(HW_MEMORY_NDP[new_bd]) :=
-  case transmit_state = transmit_updated_new_bd: 0b2_00; 
-    TRUE: HW_MEMORY_NDP[new_bd];
-  esac;
-
-next(HW_MEMORY_BP[HW_MEMORY_START]) := 
-  case transmit_bad_buffer_or_queue_full_or_not_full & HDP = 0b2_00: pa;
-    transmit_state = transmit_updated_new_bd: pa;
-    TRUE: HW_MEMORY_BP[HW_MEMORY_START];
-  esac;
-
-next(HW_MEMORY_BP[new_bd]) :=
-  case     transmit_state = transmit_updated_new_bd: 0b2_00;
-    TRUE: HW_MEMORY_BP[new_bd];
-  esac;
-
-next(HW_MEMORY_BL[HW_MEMORY_START]) :=
-  case transmit_bad_buffer_or_queue_full_or_not_full & HDP = 0b2_00: length;
-    TRUE: HW_MEMORY_BL[HW_MEMORY_START];
-  esac;
-
-next(HW_MEMORY_BL[new_bd]) :=
-  case     transmit_state = transmit_updated_new_bd: 0b2_00;
-    TRUE: HW_MEMOERY_BL[new_bd];
-  esac;
-
-
-next(HW_MEMORY_OWN[HW_MEMORY_START]) :=
-  case transmit_bad_buffer_or_queue_full_or_not_full & HDP = 0b2_00: 0b1_1;
-    transmit_state = transmit_updated_new_bd: 0b1_1;
-    TRUE: HW_MEMORY_OWN[HW_MEMORY_START];
-  esac;
-
-next(HW_MEMORY_OWN[new_bd]) :=
-    case transmit_state = transmit_updated_new_bd: 0b2_00;
-  TRUE: HW_MEMORY_OWN[new_bd];
-  esac;
 
 
 
-next(HW_MEMORY_EOQ[HW_MEMORY_START]) := 
-  case transmit_bad_buffer_or_queue_full_or_not_full & HDP = 0b2_00: 0b1_0;
-    TRUE: HW_MEMORY_EOQ[HW_MEMORY_START];
-  esac;
+--next(HW_MEMORY_BP[HW_MEMORY_START]) := 
+--  case transmit_bad_buffer_or_queue_full_or_not_queue_full & HDP = 0b2_00: pa;
+--    transmit_state = transmit_updated_new_bd: pa;
+--    TRUE: HW_MEMORY_BP[HW_MEMORY_START];
+--  esac;
 
-next(HW_MEMOERY_EOQ[new_bd]) :=
- case transmit_state = transmit_updated_new_bd: 0b2_00;
-   TRUE: HW_MEMORY_EOQ[new_bd];
-  esac;
+
+
+
+--next(HW_MEMORY_BL[HW_MEMORY_START]) :=
+--  case transmit_bad_buffer_or_queue_full_or_not_queue_full & HDP = 0b2_00: length;
+--    TRUE: HW_MEMORY_BL[HW_MEMORY_START];
+--  esac;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 next(new_bd) :=
@@ -128,11 +114,15 @@ next(new_bd) :=
 
 
 next(transmit_state) := 
-  case open_state = open_idle & next(open_state) = open_idle & transmit_state = transmit_idle & stop_state = stop_idle & next(stop_state) = stop_idle & turn = software: transmit_start union transmit_idle;
-    transmit_update_queue & !(queue_head != 0 & HW_MEMORY_OWN[queue_head] = 0b1_0) & turn = software: transmit_bad_buffer_or_queue_full_or_not_queue_full;
-    transmit_bad_buffer_or_queue_full_or_not_queue_full & !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP = 0b2_00 & turn = software: transmit_idle;
-    transmit_bad_buffer_or_queue_full_or_not_queue_full & !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP != 0b2_00 & turn = software: transmit_updated_new_bd;
-    transmit_updated_new_bd & turn = software: transmit_check_misqueue;
+  case open_state = open_idle & next(open_state) = open_idle & transmit_state = transmit_idle &
+  -- stop_state = stop_idle & next(stop_state) = stop_idle &
+  turn = software: transmit_start union transmit_idle;
+
+
+    transmit_state = transmit_update_queue & !(queue_head != 0d2_0 & HW_MEMORY_OWN[queue_head] = 0b1_0) & turn = software: transmit_bad_buffer_or_queue_full_or_not_queue_full;
+    transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP = 0b2_00 & turn = software: transmit_idle;
+    transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP != 0b2_00 & turn = software: transmit_updated_new_bd;
+    transmit_state = transmit_updated_new_bd & turn = software: transmit_check_misqueue;
     transmit_state = transmit_check_misqueue & turn = software: transmit_idle;
     TRUE: transmit_state;
   esac;
@@ -148,31 +138,344 @@ next(stop_state) :=
  			stop_state = stop_idle & turn = software: stop_write_td union stop_idle;
     stop_state = stop_set_teardown & turn = software: stop_teardown_test;
     stop_state = stop_teardown_test & turn = software: stop_idle;
+  TRUE: stop_state;
   esac;
 
 
 
 
 
-TRANSMIT_OVERFLOW := pa + length < pa;
-TRANSMIT_LENGTH_EQ_ZERO := length = 0;
-TRANSMIT_INSIDE_RAM := RAM_START <= pa & pa + length - 0b2_01 <= RAM_END;
-TRANSMIT_QUEUE_FULL :=
-	(queue_head < queue_tail &
-	 queue_head = HW_MEMORY_START & queue_tail = HW_MEMORY_END) |
-	(queue_tail < queue_head & queue_tail + 0b2_01 = queue_head);
-TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL := TRANSMIT_OVERFLOW |
-	TRANSMIT_LENGTH_EQ_ZERO | !TRANSMIT_INSIDE_RAM | TRANSMIT_QUEUE_FULL;
+--TRANSMIT_OVERFLOW := pa + length < pa;
+--TRANSMIT_LENGTH_EQ_ZERO := length = 0;
+--TRANSMIT_INSIDE_RAM := RAM_START <= pa & pa + length - 0b2_01 <= RAM_END;
+--TRANSMIT_QUEUE_FULL :=
+--	(queue_head < queue_tail &
+--	 queue_head = HW_MEMORY_START & queue_tail = HW_MEMORY_END) |
+--	(queue_tail < queue_head & queue_tail + 0b2_01 = queue_head);
+--TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL := TRANSMIT_OVERFLOW |
+--	TRANSMIT_LENGTH_EQ_ZERO | !TRANSMIT_INSIDE_RAM | TRANSMIT_QUEUE_FULL;
+
+
+
+
+
+
+
+
+
+
+
+MODULE transmitter(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, turn)
+VAR
+  it_state: {it_idle, it_resetting, it_waiting_hdp};
+  tx_state: {tx_idle, tx_fetching_bd, tx_reading_memory, tx_setting_eoq_or_releasing_bd, tx_releasing_bd};
+  td_state: {td_idle, td_waiting_for_tx, td_releasing_bd, td_clearing_td};
+  dead: boolean;
+
+  --turn: {HW_init, HW_tx, HW_td, HW_it};
+
+DEFINE
+        TX_BUFFER_OVERFLOW := HW_MEMORY_BP[HDP] + HW_MEMORY_BL[HDP] < HW_MEMORY_BP[HDP];
+        TX_BUFFER_INSIDE_RAM := RAM_START <= HW_MEMORY_BP[HDP] & HW_MEMORY_BP[HDP] + HW_MEMORY_BL[HDP] - 0b2_01 <= RAM_END;
+	HW_MEMORY_START := 0b2_01;
+	HW_MEMORY_END := 0b2_11;
+	RAM_START := 0b2_01;
+	RAM_END := 0b2_10;
+
+
+
+
+ASSIGN
+  init(it_state) := it_idle;
+  init(tx_state) := tx_idle;
+  init(td_state) := td_idle;
+  --init(stop_state) := stop_idle;
+  init(dead) := FALSE;
+
+	
+
+next(it_state) :=
+  -- INIT
+  case it_state = it_resetting: it_waiting_hdp;
+    it_state = it_idle & RESET = 0b1_0 & next(RESET) = 0b1_1 & open_state = open_set_reset & next(open_state) = open_reset_test & turn = software: it_resetting;
+    it_state = it_resetting & turn = HW_init: it_waiting_hdp;
+    it_state = it_waiting_hdp &
+               next(HDP) = 0b2_00 &
+               open_state = open_clear_hdp &
+               next(open_state) = open_clear_queue &
+               turn = software: it_idle;
+    TRUE: it_state;
+  esac;
+
+
+next(dead) :=
+  case
+   -- INIT
+
+   -- STEP
+    tx_state = tx_fetching_bd & (HW_MEMORY_OWN[HDP] = 0b1_0 | HW_MEMORY_EOQ[HDP] = 0b1_1 |
+			HW_MEMORY_BL[HDP] = 0b2_00 | TX_BUFFER_OVERFLOW |
+			!TX_BUFFER_INSIDE_RAM): TRUE;
+  TRUE: dead;
+  esac;
+
+
+
+next(tx_state) :=
+  case
+    tx_state = tx_fetching_bd & !(HW_MEMORY_OWN[HDP] = 0b1_0 | HW_MEMORY_EOQ[HDP] = 0b1_1 |
+                        HW_MEMORY_BL[HDP] = 0b2_00 | TX_BUFFER_OVERFLOW |
+                        !TX_BUFFER_INSIDE_RAM): tx_reading_memory;
+    tx_state = tx_reading_memory: tx_setting_eoq_or_releasing_bd;
+    tx_state = tx_setting_eoq_or_releasing_bd & (HW_MEMORY_NDP[HDP] = 0b2_00): tx_releasing_bd;
+    tx_state = tx_setting_eoq_or_releasing_bd & (td_state = td_waiting_for_tx): tx_idle;
+
+    tx_state = tx_setting_eoq_or_releasing_bd: tx_fetching_bd;
+    tx_state = tx_releasing_bd: tx_idle;
+    TRUE: tx_state; 
+  esac;
+
+--next(HW_MEMORY_OWN[0]) :=
+--  case  -- HDP = 1: HW_MEMORY_OWN[0];
+--    (tx_state = tx_setting_eoq_or_releasing_bd) &  (HW_MEMORY_NDP[HDP] = 0b2_00): 0b1_1;
+--    (tx_state = tx_setting_eoq_or_releasing_bd): 0b1_0;
+--     td_state = td_releasing_bd & turn = HW_td: 0b1_0;
+--    TRUE: HW_MEMORY_OWN[0];
+--  esac;
+
+--next(HW_MEMORY_OWN[1]) :=
+--  case   --HDP = 0: HW_MEMORY_OWN[1];
+--    (tx_state = tx_setting_eoq_or_releasing_bd) &  (HW_MEMORY_NDP[HDP] = 0b2_00): 0b1_1;
+--    (tx_state = tx_setting_eoq_or_releasing_bd): 0b1_0;
+--     td_state = td_releasing_bd & turn = HW_td: 0b1_0;
+--    TRUE: HW_MEMORY_OWN[1];
+--  esac;
+
+
+--next(HW_MEMORY_EOQ[0]):=
+--  case td_state = td_waiting_for_tx & tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: 0b1_1;
+--    TRUE: HW_MEMORY_EOQ[HDP];
+--  esac;
+
+--next(HW_MEMORY_EOQ[1]):=
+--  case td_state = td_waiting_for_tx & tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: 0b1_1;
+--    TRUE: HW_MEMORY_EOQ[HDP];
+--  esac;
+
+
+
+
+
+
+
+
+
+next(td_state) :=
+  case
+    td_state = td_idle & TEARDOWN = 0b1_0 & next(TEARDOWN) = 0b1_1 & turn = software: td_waiting_for_tx;
+    td_state = td_waiting_for_tx & tx_state = tx_idle & HDP = 0b2_00 & turn = HW_td: td_idle;
+    td_state = td_waiting_for_tx & tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: td_releasing_bd;
+    td_state = td_releasing_bd & turn = HW_td: td_clearing_td;
+    td_state = td_clearing_td & turn = HW_td: td_idle;
+    TRUE: td_state;
+  esac;
+
+
+--next(TEARDOWN) :=
+--  case 
+--     td_state = td_waiting_for_tx & tx_state = tx_idle & HDP = 0b2_00 & turn = HW_td: 0b1_0;
+--     td_state = td_clearing_td & turn = HW_td: 0b1_0; 
+--     TRUE: TEARDOWN;
+--  esac;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+MODULE main
+VAR
+  RESET: word[1];
+  HDP: word[2];
+  TEARDOWN: word[1];
+  HW_MEMORY_NDP: array 0..3 of word[2];
+  HW_MEMORY_BP: array 0..3 of word[2];
+  HW_MEMORY_BL: array 0..3 of word[2];
+  HW_MEMORY_OWN: array 0..3 of word[1];
+  HW_MEMORY_EOQ: array 0..3 of word[1];
+  open_state: {open_idle, open_set_reset, open_reset_test, open_clear_hdp, open_clear_queue};
+  turn: {software, HW_tx, HW_td, HW_init};
+  pa: word[2];
+  length: word[2];
+  queue_tail: word[2];
+  new_bd: word[2];
+
+  t_smit: transmitter(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, software); 
+  d_rive: device_driver(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, software, pa, length);
+  
+
+
+DEFINE
+  HW_MEMORY_START_ := 0b2_01;
+  HW_MEMORY_START := 0b2_01;
+  HW_MEMORY_END := 0b2_11;
+  RAM_START := 0b2_01;
+  RAM_END := 0b2_10;
+
+
+ASSIGN
+
+next(RESET) :=
+  case
+    -- INIT
+    t_smit.it_state = it_resetting: 0b1_0;
+    t_smit.it_state = it_resetting & turn = HW_init: 0b1_0;
+    d_rive.open_state = open_set_reset: 0b1_1;
+    TRUE: RESET;
+  esac;
+
+
+
+
+next(HDP) :=
+  -- TRANSMITTER
+  case  (t_smit.tx_state = tx_setting_eoq_or_releasing_bd) & !(HW_MEMORY_NDP[HDP] = 0b2_00):  HW_MEMORY_NDP[HDP];
+    t_smit.tx_state = tx_releasing_bd: 0b2_00;
+    t_smit.td_state = td_releasing_bd & turn = HW_td: 0b2_00;
+
+    -- DRIVER
+    open_state = open_reset_test & next(open_state) = open_idle & turn = software: 0b2_00;
+    t_smit.tx_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & HDP = 0b2_00: HW_MEMORY_START_;
+    t_smit.tx_state = transmit_check_misqueue & HW_MEMORY_OWN[queue_tail] = 0b1_0 & HW_MEMORY_EOQ[queue_tail] = 0b1_1 & HW_MEMORY_NDP[queue_tail] != 0b2_00: new_bd;
+    open_state = open_reset_test: 0b2_00;
+    TRUE: HDP;
+  esac;
+
+
+next(HW_MEMORY_NDP[0]) :=
+  case d_rive.transmit_state = transmit_updated_new_bd: 0b2_00;
+    TRUE: HW_MEMORY_NDP[new_bd];
+  esac;
+next(HW_MEMORY_NDP[1]) :=
+  case d_rive.transmit_state = transmit_updated_new_bd: 0b2_00;
+    TRUE: HW_MEMORY_NDP[new_bd];
+  esac;
+
+
+
+
+
+
+
+
+
+
+
+next(HW_MEMORY_BL[0]) :=
+  case d_rive.transmit_state = transmit_updated_new_bd: 0b2_00;
+    TRUE: HW_MEMORY_BL[new_bd];
+  esac;
+
+next(HW_MEMORY_BL[1]) :=
+  case d_rive.transmit_state = transmit_updated_new_bd: 0b2_00;
+    TRUE: HW_MEMORY_BL[new_bd];
+  esac;
+
+
+next(HW_MEMORY_OWN[0]) :=
+    case d_rive.transmit_state = transmit_updated_new_bd: 0b1_0;
+
+    -- TRANSMITTER
+
+    HDP = 0d2_1: HW_MEMORY_OWN[0];
+    (t_smit.tx_state = tx_setting_eoq_or_releasing_bd) &  (HW_MEMORY_NDP[HDP] = 0b2_0): 0b1_1;
+    (t_smit.tx_state = tx_setting_eoq_or_releasing_bd): 0b1_0;
+     t_smit.td_state = td_releasing_bd & turn = HW_td: 0b1_0;
+    TRUE: HW_MEMORY_OWN[0];
+  esac;
+
+
+next(HW_MEMORY_OWN[1]) :=
+  case   --HDP = 0: HW_MEMORY_OWN[1];
+    (t_smit.tx_state = tx_setting_eoq_or_releasing_bd) &  (HW_MEMORY_NDP[HDP] = 0b2_0): 0b1_1;
+    (t_smit.tx_state = tx_setting_eoq_or_releasing_bd): 0b1_0;
+     t_smit.td_state = td_releasing_bd & turn = HW_td: 0b1_0;
+    TRUE: HW_MEMORY_OWN[1];
+    --TRUE: HW_MEMORY_OWN[new_bd];   -- WHICH ONE?
+  esac;
+
+--next(HW_MEMORY_OWN[1]) :=
+--    case d_rive.transmit_state = transmit_updated_new_bd: 0b2_00;
+  -- T SMIT
+--    HDP = 0: HW_MEMORY_OWN[1];
+--    (t_smit.tx_state = tx_setting_eoq_or_releasing_bd) &  (HW_MEMORY_NDP[HDP] = 0b2_00): 0b1_1;
+ --   (t_smit.tx_state = tx_setting_eoq_or_releasing_bd): 0b1_0;
+ --    t_smit.td_state = td_releasing_bd & turn = HW_td: 0b1_0;
+
+--  TRUE: HW_MEMORY_OWN[new_bd];
+--  esac;
+
+
+--next(HW_MEMORY_EOQ[HW_MEMORY_START]) :=
+--  case d_rive.transmit_state =transmit_bad_buffer_or_queue_full_or_not_queue_full & HDP = 0b2_00: 0b1_0;
+--    TRUE: HW_MEMORY_EOQ[HW_MEMORY_START];
+--  esac;
+
+next(HW_MEMORY_EOQ[0]) :=
+ -- DRRIVER
+ case d_rive.transmit_state = transmit_updated_new_bd: 0b1_0;
+ TRUE: HW_MEMORY_EOQ[new_bd];
+  --TRANSMITTER
+  t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: 0b1_1;
+  TRUE: HW_MEMORY_EOQ[HDP];
+  esac;
+
+next(HW_MEMORY_EOQ[1]) :=
+ case d_rive.transmit_state = transmit_updated_new_bd: 0b1_0;
+   TRUE: HW_MEMORY_EOQ[new_bd];
+  -- TRANSMITTER
+  t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: 0b1_1;
+  TRUE: HW_MEMORY_EOQ[HDP];
+  esac;
 
 
 
 next(TEARDOWN) :=
-  case 
-    stop_state = stop_set_teardown: 1;
-    stop_state = stop_set_teardown & next(stop_state) = stop_teardown_test & turn = software: 1;
+  case
+    d_rive.stop_state = stop_set_teardown: 0b1_0;
+    d_rive.stop_state = stop_set_teardown & next(d_rive.stop_state) = stop_teardown_test & turn = software: 0b1_0;
     TRUE: TEARDOWN;
+  -- TRANSMITTER
+     t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP = 0b2_00 & turn = HW_td: 0b1_0;
+     t_smit.td_state = td_clearing_td & turn = HW_td: 0b1_0;
+     TRUE: TEARDOWN;
+
+
   esac;
 
-MODULE main
+
+--TRANSMITER
+next(HW_MEMORY_BP[0]) :=
+  case     t_smit.tx_state = transmit_updated_new_bd: 0b2_00;
+    TRUE: HW_MEMORY_BP[new_bd];
+  esac;
+
+next(HW_MEMORY_BP[1]) :=
+  case     t_smit.tx_state = transmit_updated_new_bd: 0b2_00;
+    TRUE: HW_MEMORY_BP[new_bd];
+  esac;
+--END TRANSMITTER
+
+
+
+SPEC AG (t_smit.td_state = td_idle);
 
 
