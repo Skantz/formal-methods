@@ -1,9 +1,9 @@
-MODULE device_driver(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, turn, pa, length)
+MODULE device_driver(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, turn, pa, length, queue_head, queue_tail)
 
 VAR
-  queue_head: word[2];
-  queue_tail: word[2];
-  new_bd: word[2];
+  --queue_head: word[2];
+  --queue_tail: word[2];
+  --new_bd: word[2];
   --CHANGE? transmit_start is removed from transmit state
   transmit_state: {transmit_idle,  transmit_update_queue, transmit_bad_buffer_or_queue_full_or_not_queue_full,
                    transmit_updated_new_bd, transmit_check_misqueue};
@@ -39,7 +39,9 @@ INVAR
   -- open runs first
     (open_has_run | (transmit_state = transmit_idle & stop_state = stop_idle)) &
   -- open can't run after transmit
-    ((last_run_function != transmit) | open_state = open_idle);
+    ((last_run_function != transmit) | (open_state = open_idle));  
+
+
     
 
 
@@ -77,72 +79,6 @@ next(open_state) :=
        open_state = open_reset_test & RESET != 0b1_1 & turn = software: open_idle;
        TRUE: open_state;
   esac;
-
-next(queue_head) := 
-  case
-    open_state = open_reset_test &
-      next(open_state) = open_idle &
-      turn = software: 0b2_00;
- 
-    transmit_state = transmit_update_queue &
-      queue_head != 0d2_0 &
-      HW_MEMORY_OWN[queue_head] = 0b1_0 &
-      turn = software: HW_MEMORY_NDP[queue_head];
-
-    !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
-      HDP = 0b2_00 &
-      turn = software: HW_MEMORY_START;
-
-    transmit_state = transmit_check_misqueue &
-			HW_MEMORY_OWN[queue_tail] = 0b1_0 &
-			HW_MEMORY_EOQ[queue_tail] = 0b1_1 &
-			HW_MEMORY_NDP[queue_tail] != 0b2_00 &
-                        turn = software: new_bd;
-
-    stop_state = stop_teardown_test &
-      next(stop_state) = stop_idle &
-      turn = software: 0b2_00;
-
-  TRUE: queue_head;
-  esac;
-
-
-
-next(queue_tail) := 
-  case
-  open_state = open_reset_test &
-    next(open_state) = open_idle &
-    turn = software: 0b2_00;
-  transmit_state = transmit_update_queue &
-    !(queue_head != 0d2_0 & HW_MEMORY_OWN[queue_head] = 0b1_0) &
-    queue_head = 0b2_00 & turn = software: 0b2_00;
-  transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-    !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
-    HDP = 0b2_00 & turn = software: HW_MEMORY_START;
-  transmit_state = transmit_check_misqueue &
-    turn = software: new_bd;
-  --CHANGE: This will never happen because stop update queue doesn't exist. Removing.
-  --stop_state = stop_update_queue &
-    --next(stop_state) = stop_idle &
-    --turn = software: 0b2_00;
-  TRUE: queue_tail;
-  esac;
-
-
-
-
-next(new_bd) :=
-  case
-    transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-    !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP != 0b2_00 &
-    queue_tail = HW_MEMORY_END & turn = software: HW_MEMORY_START;
-
-    transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-    !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP != 0b2_00 &
-    queue_tail != HW_MEMORY_END & turn = software: queue_tail + 0b2_01;
-    TRUE: new_bd;
-  esac;
-
 
 
 
@@ -226,13 +162,14 @@ INVAR
  --	set to 0. Then the software writes zero to HDP. This sequence of steps
  --	initializes the transmitter. Any other sequence operations during
  --	initialization is erronous.
-  (it_state = it_idle | (tx_state = tx_idle & td_state = td_idle)) &
+  --(it_state = it_idle | (tx_state = tx_idle & td_state = td_idle)) &
   -- If the transmitter performs a reset, then open is currently executed
-  (RESET = 0d1_0 | open_state != open_idle) &
+  --(RESET = 0d1_0 | open_state != open_idle) &
   -- If the transmitter performs a tear down, then the transmitter is not
   --performing a reset.
-  (TEARDOWN = 0d1_0 | RESET = 0d1_0) &
-  (RESET = 0d1_0 | (TEARDOWN = 0d1_0 & tx_state = tx_idle));
+  --(TEARDOWN = 0d1_0 | RESET = 0d1_0) &
+  --(RESET = 0d1_0 | (TEARDOWN = 0d1_0 & tx_state = tx_idle));
+  TRUE;
 
 ASSIGN
   init(it_state) := it_idle;
@@ -241,6 +178,13 @@ ASSIGN
   --init(stop_state) := stop_idle;
   init(dead) := FALSE;
 
+next(last_run_function) := 
+  case
+    it_state != it_idle & next(it_state) = it_idle: it;
+    tx_state != tx_idle & next(tx_state) = tx_idle: tx;
+    td_state != td_idle & next(td_state) = td_idle: td;
+    TRUE: last_run_function;
+  esac;
 
 
 	
@@ -262,7 +206,6 @@ next(it_state) :=
 
 next(dead) :=
   case
-
     tx_state = tx_fetching_bd & (HW_MEMORY_OWN[HDP] = 0b1_0 | HW_MEMORY_EOQ[HDP] = 0b1_1 |
 			HW_MEMORY_BL[HDP] = 0b2_00 | TX_BUFFER_OVERFLOW |
 			!TX_BUFFER_INSIDE_RAM) & turn = HW_tx: TRUE;
@@ -336,7 +279,7 @@ VAR
   new_bd: word[2]; 
 
   t_smit: transmitter(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, software); 
-  d_rive: device_driver(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, software, pa, length);
+  d_rive: device_driver(RESET, HDP, TEARDOWN, HW_MEMORY_NDP, HW_MEMORY_BP, HW_MEMORY_BL, HW_MEMORY_OWN, HW_MEMORY_EOQ,  open_state, software, pa, length, queue_head, queue_tail);
   
 DEFINE
   HW_MEMORY_START_ := 0b2_01;
@@ -352,17 +295,28 @@ DEFINE
 INVAR
   --A reset operation must not be initiated during an ongoing ini-
   --tialization, transmission or tear down.
-  (RESET = 0b1_0 | (RESET = 0b1_1 & t_smit.it_state = it_idle
-                                 & t_smit.tx_state = tx_idle
-                                 & t_smit.td_state = td_idle)) & 
+  --(RESET = 0b1_0 | (RESET = 0b1_1 & t_smit.it_state = it_idle
+  --                               & t_smit.tx_state = tx_idle
+  --                               & t_smit.td_state = td_idle)) & 
    -- CHANGE: we require that pa does not start at 0 or 3
-  pa != 0d2_0 & pa != 0d2_3
-  & !(length = 0d2_2 & pa = 0d2_2 );
+  pa != 0d2_0 & pa != 0d2_3 & 
+  -- CHANGE: can we do this?
+  length != 0d2_0 
+  & !(length = 0d2_2 & pa = 0d2_2 ) & 
+  !(pa + length < pa) & 
+--If the transmitter is resetting itself, then the transmitter does not
+--transmit nor performs a tear down.
+  (RESET = 0d1_0 | (t_smit.tx_state = td_idle & TEARDOWN = 0d1_0)) &
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !t_smit.TX_BUFFER_OVERFLOW & 
+  (t_smit.tx_state = tx_idle | HW_MEMORY_BP[0] = 0ud2_0) & 
+  (TEARDOWN = 0ud1_0 | d_rive.stop_state != stop_idle);
 
 
 TRANS
   -- CHANGE: pa and lenght of msg does not change during transmission
-    (t_smit.tx_state = tx_idle | (pa = next(pa) & length = next(length)));  
+    (t_smit.tx_state = tx_idle | (pa = next(pa) & length = next(length))) & 
+  -- We only change PA and length when we start to transmit
+    ((pa = next(pa) & length = next(length)) | next(t_smit.tx_state != tx_idle));
 
 
 
@@ -381,8 +335,27 @@ ASSIGN
   init(HW_MEMORY_OWN[2]) := 0d1_00;
   init(HW_MEMORY_OWN[3]) := 0d1_00;
 
+  init(HW_MEMORY_NDP[0]) := 0d2_00;
+  init(HW_MEMORY_NDP[1]) := 0d2_00;
+  init(HW_MEMORY_NDP[2]) := 0d2_00;
+  init(HW_MEMORY_NDP[3]) := 0d2_00;
 
+  init(HW_MEMORY_BP[0]) := 0d2_00;
+  init(HW_MEMORY_BP[1]) := 0d2_00;
+  init(HW_MEMORY_BP[2]) := 0d2_00;
+  init(HW_MEMORY_BP[3]) := 0d2_00;
+
+  init(HW_MEMORY_BL[0]) := 0d2_00;
+  init(HW_MEMORY_BL[1]) := 0d2_00;
+  init(HW_MEMORY_BL[2]) := 0d2_00;
+  init(HW_MEMORY_BL[3]) := 0d2_00;
   
+  init(HW_MEMORY_EOQ[0]) := 0d1_00;
+  init(HW_MEMORY_EOQ[1]) := 0d1_00;
+  init(HW_MEMORY_EOQ[2]) := 0d1_00;
+  init(HW_MEMORY_EOQ[3]) := 0d1_00;
+
+
 
 next(RESET) :=
   case
@@ -403,12 +376,17 @@ next(RESET) :=
 
 
 
+next(new_bd) :=
+  case
+    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+    !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP != 0b2_00 &
+    queue_tail = HW_MEMORY_END & turn = software: HW_MEMORY_START;
 
-
-
-
-
-
+    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+    !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP != 0b2_00 &
+    queue_tail != HW_MEMORY_END & turn = software: queue_tail + 0b2_01;
+    TRUE: new_bd;
+  esac;
 
 
 
@@ -594,11 +572,9 @@ next(TEARDOWN) :=
   case
     d_rive.stop_state = stop_set_teardown & next(d_rive.stop_state) = stop_teardown_test & turn = software: 0b1_1;
     
-
-  -- TRANSMITTER
-     t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP = 0b2_00 & turn = HW_td: 0b1_0;
-     t_smit.td_state = td_clearing_td & turn = HW_td: 0b1_0;
-     TRUE: TEARDOWN;
+   t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP = 0b2_00 & turn = HW_td: 0b1_0;
+   t_smit.td_state = td_clearing_td & turn = HW_td: 0b1_0;
+   TRUE: TEARDOWN;
   esac;
 
 
@@ -628,6 +604,56 @@ next(HW_MEMORY_BP[3]) :=
   case     t_smit.tx_state = transmit_updated_new_bd: 0b2_00;
     new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: pa;
     TRUE: HW_MEMORY_BP[3];
+  esac;
+
+next(queue_head) :=
+  case
+    open_state = open_reset_test &
+      next(open_state) = open_idle &
+      turn = software: 0b2_00;
+
+    d_rive.transmit_state = transmit_update_queue &
+      queue_head != 0d2_0 &
+      HW_MEMORY_OWN[queue_head] = 0b1_0 &
+      turn = software: HW_MEMORY_NDP[queue_head];
+
+    !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
+      HDP = 0b2_00 &
+      turn = software: HW_MEMORY_START;
+
+    d_rive.transmit_state = transmit_check_misqueue &
+                        HW_MEMORY_OWN[queue_tail] = 0b1_0 &
+                        HW_MEMORY_EOQ[queue_tail] = 0b1_1 &
+                        HW_MEMORY_NDP[queue_tail] != 0b2_00 &
+                        turn = software: new_bd;
+
+    d_rive.stop_state = stop_teardown_test &
+      next(d_rive.stop_state) = stop_idle &
+      turn = software: 0b2_00;
+
+  TRUE: queue_head;
+  esac;
+
+
+
+next(queue_tail) :=
+  case
+  d_rive.open_state = open_reset_test &
+    next(open_state) = open_idle &
+    turn = software: 0b2_00;
+  d_rive.transmit_state = transmit_update_queue &
+    !(queue_head != 0d2_0 & HW_MEMORY_OWN[queue_head] = 0b1_0) &
+    queue_head = 0b2_00 & turn = software: 0b2_00;
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+    !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
+    HDP = 0b2_00 & turn = software: HW_MEMORY_START;
+  d_rive.transmit_state = transmit_check_misqueue &
+    turn = software: new_bd;
+  --CHANGE: This will never happen because stop update queue doesn't exist. Removing.
+  --stop_state = stop_update_queue &
+    --next(stop_state) = stop_idle &
+    --turn = software: 0b2_00;
+  TRUE: queue_tail;
   esac;
 
 
@@ -666,6 +692,22 @@ SPEC AG EF (d_rive.stop_state = stop_idle);
 
 
 -- TRANSMIT DRIVER
+
+
+--Easy ones:
+SPEC EF(t_smit.it_state = it_resetting);
+SPEC EF(t_smit.it_state = it_waiting_hdp);
+
+SPEC EF(t_smit.td_state = td_waiting_for_tx);
+SPEC EF(t_smit.td_state = td_releasing_bd);
+SPEC EF(t_smit.td_state = td_clearing_td);
+
+SPEC EF(t_smit.tx_state = tx_fetching_bd);
+SPEC EF(t_smit.tx_state = tx_reading_memory);
+SPEC EF(t_smit.tx_state = tx_releasing_bd);
+SPEC EF(t_smit.tx_state = td_waiting_for_tx);
+
+--Global ones:
 
 SPEC AG EF (t_smit.it_state != it_idle );
 SPEC AG EF (t_smit.tx_state != tx_idle );
