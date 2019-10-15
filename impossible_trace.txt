@@ -1,0 +1,77 @@
+    <!-- ################### Trace number: 1 ################### -->
+Trace Description: Simulation Trace 
+Trace Type: Simulation 
+  -> State: 1.1 <-
+    RESET = 0ud1_0
+    HDP = 0ud2_3
+    TEARDOWN = 0ud1_0
+    HW_MEMORY_NDP[0] = 0ud2_1
+    HW_MEMORY_NDP[1] = 0ud2_3
+    HW_MEMORY_NDP[2] = 0ud2_1
+    HW_MEMORY_NDP[3] = 0ud2_2
+    HW_MEMORY_BP[0] = 0ud2_0
+    HW_MEMORY_BP[1] = 0ud2_0
+    HW_MEMORY_BP[2] = 0ud2_0
+    HW_MEMORY_BP[3] = 0ud2_1
+    HW_MEMORY_BL[0] = 0ud2_0
+    HW_MEMORY_BL[1] = 0ud2_1
+    HW_MEMORY_BL[2] = 0ud2_0
+    HW_MEMORY_BL[3] = 0ud2_2
+    HW_MEMORY_OWN[0] = 0ud1_1
+    HW_MEMORY_OWN[1] = 0ud1_0
+    HW_MEMORY_OWN[2] = 0ud1_1
+    HW_MEMORY_OWN[3] = 0ud1_1
+    HW_MEMORY_EOQ[0] = 0ud1_1
+    HW_MEMORY_EOQ[1] = 0ud1_1
+    HW_MEMORY_EOQ[2] = 0ud1_0
+    HW_MEMORY_EOQ[3] = 0ud1_1
+    open_state = open_idle
+    turn = software
+    pa = 0ud2_1
+    length = 0ud2_2
+    queue_head = 0ud2_3
+    queue_tail = 0ud2_3
+    new_bd = 0ud2_0
+    t_smit.it_state = it_idle
+    t_smit.tx_state = tx_idle
+    t_smit.td_state = td_idle
+    t_smit.dead = FALSE
+    t_smit.last_run_function = it
+    t_smit.it_has_run = FALSE
+    d_rive.transmit_state = transmit_idle
+    d_rive.stop_state = stop_idle
+    d_rive.last_run_function = none
+    d_rive.open_has_run = FALSE
+    RAM_END = 0ud2_2
+    RAM_START = 0ud2_1
+    HW_MEMORY_END = 0ud2_3
+    HW_MEMORY_START = 0ud2_1
+    HW_MEMORY_START_ = 0ud2_1
+    t_smit.RAM_END = 0ud2_2
+    t_smit.RAM_START = 0ud2_1
+    t_smit.HW_MEMORY_END = 0ud2_3
+    t_smit.HW_MEMORY_START = 0ud2_1
+    t_smit.TX_BUFFER_INSIDE_RAM = TRUE
+    t_smit.TX_BUFFER_OVERFLOW = FALSE
+    d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL = FALSE
+    d_rive.TRANSMIT_QUEUE_FULL = FALSE
+    d_rive.TRANSMIT_INSIDE_RAM = TRUE
+    d_rive.TRANSMIT_LENGTH_EQ_ZERO = FALSE
+    d_rive.TRANSMIT_OVERFLOW = FALSE
+    d_rive.RAM_END = 0ud2_2
+    d_rive.RAM_START = 0ud2_1
+    d_rive.HW_MEMORY_END = 0ud2_3
+    d_rive.HW_MEMORY_START = 0ud2_1
+  -> State: 1.2 <-
+  -> State: 1.3 <-
+    turn = HW_tx
+  -> State: 1.4 <-
+  -> State: 1.5 <-
+    turn = HW_td
+  -> State: 1.6 <-
+  -> State: 1.7 <-
+    open_state = open_set_reset
+  -> State: 1.8 <-
+    open_state = open_reset_test
+    turn = software
+
