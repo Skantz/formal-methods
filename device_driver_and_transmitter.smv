@@ -157,21 +157,21 @@ DEFINE
 	RAM_START := 0b2_01;
 	RAM_END := 0b2_10;
 
-INVAR
+--INVAR
  --	Initialization works as follows. Write 1 to RESET. The transmitter then
  --	resets itself. When the transmitter has finished the resetting, RESET is
  --	set to 0. Then the software writes zero to HDP. This sequence of steps
  --	initializes the transmitter. Any other sequence operations during
  --	initialization is erronous.
-  (it_state = it_idle | (tx_state = tx_idle & td_state = td_idle)) &
-  -- If the transmitter performs a reset, then open is currently executed
-  (RESET = 0d1_0 | open_state != open_idle) &
+ -- (it_state = it_idle | (tx_state = tx_idle & td_state = td_idle)) &
+ -- -- If the transmitter performs a reset, then open is currently executed
+ -- (RESET = 0d1_0 | open_state != open_idle) &
   -- If the transmitter performs a tear down, then the transmitter is not
   --performing a reset.
-  (TEARDOWN = 0d1_0 | RESET = 0d1_0) &
-  (RESET = 0d1_0 | (TEARDOWN = 0d1_0 & tx_state = tx_idle)) &
+ -- (TEARDOWN = 0d1_0 | RESET = 0d1_0) &
+ -- (RESET = 0d1_0 | (TEARDOWN = 0d1_0 & tx_state = tx_idle)) &
   -- CHANGE: require init runs first
-  ((tx_state = tx_idle & td_state = td_idle) | it_has_run);
+ -- ((tx_state = tx_idle & td_state = td_idle) | it_has_run);
  
 
 ASSIGN
@@ -318,7 +318,8 @@ INVAR
   (RESET = 0d1_0 | (t_smit.tx_state = td_idle & TEARDOWN = 0d1_0)) &
   !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !t_smit.TX_BUFFER_OVERFLOW & 
   (t_smit.tx_state = tx_idle | HW_MEMORY_BP[0] = 0ud2_0) & 
-  (TEARDOWN = 0ud1_0 | d_rive.stop_state != stop_idle);
+  (TEARDOWN = 0ud1_0 | d_rive.stop_state != stop_idle) &
+  (d_rive.transmit_state = transmit_idle | (t_smit.tx_state = tx_idle));
 
 
 TRANS
@@ -430,13 +431,19 @@ next(HDP) :=
 
 next(HW_MEMORY_NDP[0]) :=
   case
-  queue_tail = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b2_00; 
+  queue_tail = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: new_bd; 
+  new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: new_bd;
   TRUE: HW_MEMORY_NDP[0];
   esac;
 
 next(HW_MEMORY_NDP[HW_MEMORY_START]) :=
   case
+
+    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+      !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP = 0b2_00 & turn = software: 0b2_00;
+
     queue_tail = 0d2_01 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b2_00;
+    new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: new_bd;
     TRUE: HW_MEMORY_NDP[HW_MEMORY_START];
   esac;
 
@@ -444,6 +451,7 @@ next(HW_MEMORY_NDP[HW_MEMORY_START]) :=
 next(HW_MEMORY_NDP[2]) :=
   case
     queue_tail = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b2_00;
+    new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: new_bd;
     TRUE: HW_MEMORY_NDP[2];
   esac;
 
@@ -451,6 +459,7 @@ next(HW_MEMORY_NDP[2]) :=
 next(HW_MEMORY_NDP[3]) :=
   case
     queue_tail = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b2_00;
+    new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: new_bd;
     TRUE: HW_MEMORY_NDP[3];
   esac;
 
@@ -489,7 +498,7 @@ next(HW_MEMORY_OWN[0]) :=
       case new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b1_1;
 
        HDP = 0d2_0 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & HW_MEMORY_NDP[HDP] != 0b2_00 & turn = HW_tx: 0b1_0;
-       HDP = 0d2_0 & t_smit.tx_state = tx_releasing_bd & turn = HW_tx: 0b1_1;
+       HDP = 0d2_0 & t_smit.tx_state = tx_releasing_bd & turn = HW_tx: 0b1_0;
        HDP = 0d2_0 & t_smit.td_state = td_releasing_bd & turn = HW_td: 0b1_0;
 
 
@@ -499,12 +508,12 @@ next(HW_MEMORY_OWN[0]) :=
 
 next(HW_MEMORY_OWN[1]) :=
   case
-       d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP = 0b2_00 & turn = software: 0b1_00;
+       d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & HDP = 0b2_00 & turn = software: 0b1_1;
 
        new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b1_1;
 
        HDP = 0d2_1 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & HW_MEMORY_NDP[HDP] != 0b2_00 & turn = HW_tx: 0b1_0;
-       HDP = 0d2_1 & t_smit.tx_state = tx_releasing_bd & turn = HW_tx: 0b1_1;
+       HDP = 0d2_1 & t_smit.tx_state = tx_releasing_bd & turn = HW_tx: 0b1_0;
        HDP = 0d2_1 & t_smit.td_state = td_releasing_bd & turn = HW_td: 0b1_0;
 
     TRUE: HW_MEMORY_OWN[1];
@@ -518,7 +527,7 @@ next(HW_MEMORY_OWN[2]) :=
     -- TRANSMITTER
 
        HDP = 0d2_2 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & HW_MEMORY_NDP[HDP] != 0b2_00 & turn = HW_tx: 0b1_0;
-       HDP = 0d2_2 & t_smit.tx_state = tx_releasing_bd & turn = HW_tx: 0b1_1;
+       HDP = 0d2_2 & t_smit.tx_state = tx_releasing_bd & turn = HW_tx: 0b1_0;
        HDP = 0d2_2 & t_smit.td_state = td_releasing_bd & turn = HW_td: 0b1_0;
 
     TRUE: HW_MEMORY_OWN[2];
@@ -530,7 +539,7 @@ next(HW_MEMORY_OWN[3]) :=
       new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b1_1;
 
        HDP = 0d2_3 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & HW_MEMORY_NDP[HDP] != 0b2_00 & turn = HW_tx: 0b1_0;
-       HDP = 0d2_3 & t_smit.tx_state = tx_releasing_bd & turn = HW_tx: 0b1_1;
+       HDP = 0d2_3 & t_smit.tx_state = tx_releasing_bd & turn = HW_tx: 0b1_0;
        HDP = 0d2_3 & t_smit.td_state = td_releasing_bd & turn = HW_td: 0b1_0;
 
     TRUE: HW_MEMORY_OWN[3];
@@ -542,7 +551,6 @@ next(HW_MEMORY_EOQ[0]) :=
  case
    new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & turn = software:  0b1_0;
 
-   new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b1_1;
 
    HDP = 0d2_0 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & HW_MEMORY_NDP[HDP] = 0b2_00 & turn = HW_tx: 0b1_1;
    HDP = 0d2_0 & t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: 0b1_1;
@@ -561,7 +569,6 @@ next(HW_MEMORY_EOQ[1]) :=
 
    new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & turn = software:  0b1_0;
 
-   new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b1_1;
 
    HDP = 0d2_1 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & HW_MEMORY_NDP[HDP] = 0b2_00 & turn = HW_tx: 0b1_1;
    HDP = 0d2_1 & t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: 0b1_1;
@@ -572,8 +579,6 @@ next(HW_MEMORY_EOQ[2]) :=
   case
 
    new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & turn = software:  0b1_0;
-
-   new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b1_1;
 
    HDP = 0d2_2 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & HW_MEMORY_NDP[HDP] = 0b2_00 & turn = HW_tx: 0b1_1;
    HDP = 0d2_2 & t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: 0b1_1;
@@ -587,7 +592,7 @@ next(HW_MEMORY_EOQ[3]) :=
 
    new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & turn = software:  0b1_0;
 
-   new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & turn = software: 0b1_1;
+
 
    HDP = 0d2_3 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & HW_MEMORY_NDP[HDP] = 0b2_00 & turn = HW_tx: 0b1_1;
    HDP = 0d2_3 & t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & HDP != 0b2_00 & turn = HW_td: 0b1_1;
