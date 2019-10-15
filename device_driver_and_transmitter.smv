@@ -141,13 +141,19 @@ next(transmit_state) :=
 
 
 next(stop_state) := 
-  case g.open_state = open_idle & next(g.open_state) = open_idle &
+  case 
+	g.open_state = open_idle & next(g.open_state) = open_idle &
  			transmit_state = transmit_idle &
  			next(transmit_state) = transmit_idle &
   -- CHANGE: stop write td doesn't exist? 
- 			stop_state = stop_idle & g.turn = software: {stop_idle, stop_set_teardown};--stop_write_td union stop_idle;
-    stop_state = stop_set_teardown & g.turn = software: stop_teardown_test;
-    stop_state = stop_teardown_test & g.turn = software: stop_idle;
+ 			stop_state = stop_idle & g.turn = software
+	: 
+	{stop_idle, stop_set_teardown};--stop_write_td union stop_idle;
+	stop_state = stop_set_teardown & g.turn = software: stop_teardown_test;
+	stop_state = stop_teardown_test & 
+		-- This next line was missing from pseudocode new var info
+	g.TEARDOWN = 0b1_0 & 
+	g.turn = software: stop_idle;
   TRUE: stop_state;
   esac;
 
@@ -289,8 +295,8 @@ next(td_state) :=
 MODULE main
 VAR
 	g: GLOBAL;
-  t_smit: transmitter(g); 
-  d_rive: device_driver(g);
+	t_smit: transmitter(g); 
+	d_rive: device_driver(g);
 INVAR
   --A reset operation must not be initiated during an ongoing ini-
   --tialization, transmission or tear down.
@@ -303,21 +309,17 @@ INVAR
 	g.length != 0d2_0 &
 	!(g.length = 0d2_2 & g.pa = 0d2_2 ) &
 
-	!(g.pa + g.length < g.pa) &
-
-  -- No wrong states allowed
-	!d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !t_smit.TX_BUFFER_OVERFLOW
-	;
---A reset operation must not be initiated during an ongoing initialization, transmission or tear down.
---CHNG	(g.RESET = 0d1_0 | (t_smit.tx_state = tx_idle & t_smit.td_state = td_idle & t_smit.it_state = it_idle)) & 
-
-  -- First memory spot is unused
---CHNG	g.queue__head != 0d2_0 & g.queue__tail != 0d2_0;
+	!(g.pa + g.length < g.pa);
 
 --If the transmitter is resetting itself, then the transmitter does not
 --transmit nor performs a tear down.
---CHNG	(g.RESET = 0d1_0 | (t_smit.tx_state = td_idle & g.TEARDOWN = 0d1_0))
+--CHNG (g.RESET = 0d1_0 | (t_smit.tx_state = td_idle & g.TEARDOWN = 0d1_0));
 
+-- No wrong states allowed
+--CHNG !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !t_smit.TX_BUFFER_OVERFLOW
+
+--A reset operation must not be initiated during an ongoing initialization, transmission or tear down.
+--CHNG	(g.RESET = 0d1_0 | (t_smit.tx_state = tx_idle & t_smit.td_state = td_idle & t_smit.it_state = it_idle))
 
 
 TRANS
@@ -798,7 +800,7 @@ SPEC AG(d_rive.stop_state != stop_idle -> g.open_state = open_idle & d_rive.tran
 --If the transmitter is resetting itself, then the transmitter does not
 --transmit nor performs a tear down.
 
-SPEC AG(g.RESET = 0d1_1 -> t_smit.tx_state = tx_idle & g.TEARDOWN = 0d1_0);
+SPEC NAME problem := AG(g.RESET = 0d1_1 -> t_smit.tx_state = tx_idle & g.TEARDOWN = 0d1_0);
 
 --If the transmitter transmits, then the transmitter is not performing a
 --reset.
