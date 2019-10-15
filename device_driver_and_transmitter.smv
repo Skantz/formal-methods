@@ -305,10 +305,10 @@ INVAR
   --A reset operation must not be initiated during an ongoing ini-
   --tialization, transmission or tear down.
   --(RESET = 0b1_0 | (RESET = 0b1_1 & t_smit.it_state = it_idle
-  --                               & t_smit.tx_state = tx_idle
+  --                               & t_smiti.tx_state = tx_idle
   --                               & t_smit.td_state = td_idle)) & 
    -- CHANGE: we require that pa does not start at 0 or 3
-  pa != 0d2_0 & pa != 0d2_3 & 
+  pa != 0d2_0 & -- pa != 0d2_3 & 
   -- CHANGE: can we do this?
   length != 0d2_0 
   & !(length = 0d2_2 & pa = 0d2_2 ) & 
@@ -316,17 +316,27 @@ INVAR
 --If the transmitter is resetting itself, then the transmitter does not
 --transmit nor performs a tear down.
   (RESET = 0d1_0 | (t_smit.tx_state = td_idle & TEARDOWN = 0d1_0)) &
+  -- No wrong states allowed
   !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !t_smit.TX_BUFFER_OVERFLOW & 
-  (t_smit.tx_state = tx_idle | HW_MEMORY_BP[0] = 0ud2_0) & 
-  (TEARDOWN = 0ud1_0 | d_rive.stop_state != stop_idle) &
-  (d_rive.transmit_state = transmit_idle | (t_smit.tx_state = tx_idle));
+--A reset operation must not be initiated during an ongoing initialization, transmission or tear down.
+  (RESET = 0d1_0 | (t_smit.tx_state = tx_idle & t_smit.td_state = td_idle & t_smit.it_state = it_idle)) & 
+
+  -- First memory spot is unused
+  queue_head != 0d2_0 & queue_tail != 0d2_0;
+
 
 
 TRANS
   -- CHANGE: pa and lenght of msg does not change during transmission
     (t_smit.tx_state = tx_idle | (pa = next(pa) & length = next(length))) & 
   -- We only change PA and length when we start to transmit
-    ((pa = next(pa) & length = next(length)) | next(t_smit.tx_state != tx_idle));
+    ((pa = next(pa) & length = next(length)) | next(t_smit.tx_state != tx_idle)) &
+ --Writing HDP when initialization, transmission or teardown are not idle, is an error.
+    (HDP = next(HDP) | (t_smit.tx_state = tx_idle & t_smit.it_state = it_idle & t_smit.td_state = td_idle)) & 
+    --Writing TEARDOWN during initialization or teardown is an error.
+    (TEARDOWN = next(TEARDOWN) | (t_smit.it_state = it_idle & t_smit.td_state = td_idle)); 
+
+
 
 
 
@@ -338,32 +348,32 @@ ASSIGN
   -- My assumption
   init(turn) := software;
   --init(length) := 0d2_00;
-  init(queue_tail) := 0d2_00;
-  init(queue_head) := 0d2_00;
-  init(HW_MEMORY_OWN[0]) := 0d1_00;
-  init(HW_MEMORY_OWN[1]) := 0d1_00;
-  init(HW_MEMORY_OWN[2]) := 0d1_00;
-  init(HW_MEMORY_OWN[3]) := 0d1_00;
+  --init(queue_tail) := 0d2_00;
+  --init(queue_head) := 0d2_00;
+  --init(HW_MEMORY_OWN[0]) := 0d1_00;
+  --init(HW_MEMORY_OWN[1]) := 0d1_00;
+  --init(HW_MEMORY_OWN[2]) := 0d1_00;
+  --init(HW_MEMORY_OWN[3]) := 0d1_00;
 
-  init(HW_MEMORY_NDP[0]) := 0d2_00;
-  init(HW_MEMORY_NDP[1]) := 0d2_00;
-  init(HW_MEMORY_NDP[2]) := 0d2_00;
-  init(HW_MEMORY_NDP[3]) := 0d2_00;
+  --init(HW_MEMORY_NDP[0]) := 0d2_00;
+  --init(HW_MEMORY_NDP[1]) := 0d2_00;
+  --init(HW_MEMORY_NDP[2]) := 0d2_00;
+  --init(HW_MEMORY_NDP[3]) := 0d2_00;
 
-  init(HW_MEMORY_BP[0]) := 0d2_00;
-  init(HW_MEMORY_BP[1]) := 0d2_00;
-  init(HW_MEMORY_BP[2]) := 0d2_00;
-  init(HW_MEMORY_BP[3]) := 0d2_00;
+  --init(HW_MEMORY_BP[0]) := 0d2_00;
+  --init(HW_MEMORY_BP[1]) := 0d2_00;
+  --init(HW_MEMORY_BP[2]) := 0d2_00;
+  --init(HW_MEMORY_BP[3]) := 0d2_00;
 
-  init(HW_MEMORY_BL[0]) := 0d2_00;
-  init(HW_MEMORY_BL[1]) := 0d2_00;
-  init(HW_MEMORY_BL[2]) := 0d2_00;
-  init(HW_MEMORY_BL[3]) := 0d2_00;
+  --init(HW_MEMORY_BL[0]) := 0d2_00;
+  --init(HW_MEMORY_BL[1]) := 0d2_00;
+  --init(HW_MEMORY_BL[2]) := 0d2_00;
+  --init(HW_MEMORY_BL[3]) := 0d2_00;
   
-  init(HW_MEMORY_EOQ[0]) := 0d1_00;
-  init(HW_MEMORY_EOQ[1]) := 0d1_00;
-  init(HW_MEMORY_EOQ[2]) := 0d1_00;
-  init(HW_MEMORY_EOQ[3]) := 0d1_00;
+  --init(HW_MEMORY_EOQ[0]) := 0d1_00;
+  --init(HW_MEMORY_EOQ[1]) := 0d1_00;
+  --init(HW_MEMORY_EOQ[2]) := 0d1_00;
+  --init(HW_MEMORY_EOQ[3]) := 0d1_00;
 
 
 
@@ -418,8 +428,8 @@ next(HDP) :=
       HW_MEMORY_NDP[HDP] != 0b2_00 & turn = HW_tx: HW_MEMORY_NDP[HDP];
 
     -- Where did this come from?
-    --t_smit.tx_state = tx_releasing_bd & turn = HW_tx:
-    --  0b2_00;
+    t_smit.tx_state = tx_releasing_bd & turn = HW_tx:
+      0b2_00;
 
     t_smit.td_state = td_releasing_bd & turn = HW_td:
       0b2_00;
@@ -765,7 +775,7 @@ SPEC AG (t_smit.tx_state != tx_idle -> length != 0d2_0);
 -- The buffer to transmit must be completely placed in RAM. RAM starts at 1, ends at 2, inclusive.
 
 SPEC AG (t_smit.tx_state != tx_idle -> 
-         HW_MEMORY_BP[0] = 0d2_0);
+         HW_MEMORY_BP[0] != 0d2_0 & HW_MEMORY_BP[1] != 0d2_0 & HW_MEMORY_BP[2] != 0d2_0 & HW_MEMORY_BP[3] != 0d2_0 );
 
 --  HW_MEMORY_NDP: array 0..3 of word[2];
 --  HW_MEMORY_BP: array 0..3 of word[2];
@@ -777,14 +787,11 @@ SPEC AG (t_smit.tx_state != tx_idle ->
 --The buffer must not overflow w.r.t. unsigned 2**2 arithmetic
 --(See BD/BL for descriptions of memory)
 
+
 --The ownership bit must be set
 
-
 --The EOQ bit must be cleared
-SPEC AG (t_smit.tx_state != tx_idle -> --HW_MEMORY_EOQ[0] = 0d1_0
-                                         HW_MEMORY_EOQ[1] = 0d1_0
-                                       & HW_MEMORY_EOQ[2] = 0d1_0
-                                       & HW_MEMORY_EOQ[3] = 0d1_0);
+
 
 
 --open(), transmit(), stop() cannot be executed simultaneously.
