@@ -1,6 +1,5 @@
 MODULE GLOBAL
 DEFINE
-  HW_MEMORY_START_ := 0b2_01;
   HW_MEMORY_START := 0b2_01;
   HW_MEMORY_END := 0b2_11;
   RAM_START := 0b2_01;
@@ -309,14 +308,28 @@ INVAR
 	g.length != 0d2_0 &
 	!(g.length = 0d2_2 & g.pa = 0d2_2 ) &
 
-	!(g.pa + g.length < g.pa);
+	!(g.pa + g.length < g.pa) &
 
 --If the transmitter is resetting itself, then the transmitter does not
 --transmit nor performs a tear down.
---CHNG (g.RESET = 0d1_0 | (t_smit.tx_state = td_idle & g.TEARDOWN = 0d1_0));
+(g.RESET = 0d1_0 | (t_smit.tx_state = td_idle & g.TEARDOWN = 0d1_0)) &
 
 -- No wrong states allowed
---CHNG !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !t_smit.TX_BUFFER_OVERFLOW
+--CHNG !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !t_smit.TX_BUFFER_OVERFLOW &
+
+	g.HW_MEMORY_BP[0] != 0b2_00 &
+	g.HW_MEMORY_BP[1] != 0b2_00 &
+	g.HW_MEMORY_BP[2] != 0b2_00 &
+	g.HW_MEMORY_BP[3] != 0b2_00 &
+	-- Next 4 lines should be removed debugging
+	g.HW_MEMORY_BP[0] != 0b2_10 &
+	g.HW_MEMORY_BP[1] != 0b2_10 &
+	g.HW_MEMORY_BP[2] != 0b2_10 &
+	g.HW_MEMORY_BP[3] != 0b2_10 &
+	g.HW_MEMORY_BP[0] != 0b2_11 &
+	g.HW_MEMORY_BP[1] != 0b2_11 &
+	g.HW_MEMORY_BP[2] != 0b2_11 &
+	g.HW_MEMORY_BP[3] != 0b2_11;
 
 --A reset operation must not be initiated during an ongoing initialization, transmission or tear down.
 --CHNG	(g.RESET = 0d1_0 | (t_smit.tx_state = tx_idle & t_smit.td_state = td_idle & t_smit.it_state = it_idle))
@@ -710,9 +723,12 @@ next(g.queue__tail) :=
 
 --SPEC AG (EF(g.RESET = 0b1_1 & g.HDP = 0b2_00 & d_rive.g.queue__head = 0b2_00 & d_rive.g.queue__tail = 0b2_00));
 
-SPEC AG EF (d_rive.g.open_state != open_idle );
-SPEC AG EF (d_rive.transmit_state != transmit_idle );
-SPEC AG EF (d_rive.stop_state != stop_idle);
+SPEC NAME transmit_can_start := EF (d_rive.transmit_state != transmit_idle );
+SPEC NAME stop_can_start := EF (d_rive.stop_state != stop_idle );
+
+SPEC NAME open_can_always_start := AG EF (d_rive.g.open_state != open_idle );
+SPEC NAME transmit_always_can_start := AG EF (d_rive.transmit_state != transmit_idle );
+SPEC NAME stop_can_always_start := AG EF (d_rive.stop_state != stop_idle);
 
 SPEC AG EF (d_rive.g.open_state = open_idle );
 SPEC AG EF (d_rive.transmit_state = transmit_idle );
