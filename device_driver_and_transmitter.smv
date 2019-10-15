@@ -10,7 +10,7 @@ VAR
   --CHANGE: stop write td doesn't exist - removing it
   --stop update queue doesn't exist but is used?
   stop_state: {stop_idle, stop_set_teardown, stop_teardown_test}; --stop_update_queue};
-  dead: boolean;
+  --dead: boolean;
   last_run_function: {none, open, transmit, stop};
   open_has_run: boolean;
 
@@ -47,7 +47,7 @@ ASSIGN
   --init(open_state) := open_idle;
   init(transmit_state) := transmit_idle;
   init(stop_state) := stop_idle;
-  init(dead) := FALSE;
+  --init(dead) := FALSE;
   -- The open state is turned on at power on
   init(open_has_run) := FALSE; 
   init(last_run_function) := none;
@@ -354,7 +354,11 @@ INVAR
   --tialization, transmission or tear down.
   (RESET = 0b1_0 | (RESET = 0b1_1 & t_smit.it_state = it_idle
                                  & t_smit.tx_state = tx_idle
-                                 & t_smit.td_state = td_idle));
+                                 & t_smit.td_state = td_idle)) & 
+   -- CHANGE: we require that pa does not start at 0 or 3
+  pa != 0d2_0 & pa != 0d2_3
+  & !(length = 0d2_2 & pa = 0d2_2 );
+
 
 TRANS
   -- CHANGE: pa and lenght of msg does not change during transmission
