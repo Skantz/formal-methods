@@ -30,8 +30,6 @@ VAR
   queue_tail: word[2];
   new_bd: word[2]; 
 
-
-
 MODULE device_driver(g)
 VAR
   -- TODO move open_state here?
@@ -930,36 +928,26 @@ SPEC AG EF (g.open_state = open_idle );
 SPEC AG EF (d_rive.transmit_state = transmit_idle );
 SPEC AG EF (d_rive.stop_state = stop_idle);
 
-----------------------------------------------------
--- These are some extra, used for debugging
---SPEC AG (EF(g.RESET = 0b1_1 & g.HDP = 0b2_00 & d_rive.g.queue_head = 0b2_00 & d_rive.g.queue_tail = 0b2_00));
-
-SPEC NAME transmit_can_start := EF (d_rive.transmit_state != transmit_idle );
-SPEC NAME stop_can_start := EF (d_rive.stop_state != stop_idle );
-----------------------------------------------------
-
-
 ---------------
 --It is always possible for the model to sooner or later make transitions
 --that describe the initialization, transmission and tear down operations
 --of the transmitter.
 ---------------
--- TRANSMIT DRIVER
 
---Easy ones: (actually harder)
---SPEC EF(t_smit.it_state = it_resetting);
---SPEC EF(t_smit.it_state = it_waiting_hdp);
+-- can visit all checkpoints
+SPEC EF(t_smit.it_state = it_resetting);
+SPEC EF(t_smit.it_state = it_waiting_hdp);
 
---SPEC EF(t_smit.td_state = td_waiting_for_tx);
---SPEC EF(t_smit.td_state = td_releasing_bd);
---SPEC EF(t_smit.td_state = td_clearing_td);
+SPEC EF(t_smit.td_state = td_waiting_for_tx);
+SPEC EF(t_smit.td_state = td_releasing_bd);
+SPEC EF(t_smit.td_state = td_clearing_td);
 
---SPEC NAME tx_can_start := EF(t_smit.tx_state = tx_fetching_bd);
---SPEC EF(t_smit.tx_state = tx_reading_memory);
---SPEC EF(t_smit.tx_state = tx_releasing_bd);
---SPEC EF(t_smit.tx_state = td_waiting_for_tx);
+SPEC NAME tx_can_start := EF(t_smit.tx_state = tx_fetching_bd);
+SPEC EF(t_smit.tx_state = tx_reading_memory);
+SPEC EF(t_smit.tx_state = tx_releasing_bd);
+SPEC EF(t_smit.td_state = td_waiting_for_tx);
 
---Global ones:
+--Can start the subroutines at all
 
 SPEC AG EF (t_smit.it_state != it_idle );
 SPEC AG EF (t_smit.tx_state != tx_idle );
@@ -969,23 +957,114 @@ SPEC AG EF (t_smit.it_state = it_idle );
 SPEC AG EF (t_smit.tx_state = tx_idle );
 SPEC AG EF (t_smit.td_state = td_idle );
 
---STOP DRIVER
+---------------
+--open(), transmit(), stop() cannot be executed simultaneously.
+---------------
 
---SPEC AG EF(g.TEARDOWN = 0b1_1 & d_rive.g.queue_head = 0b2_00 & d_rive.g.queue_tail = 0b2_00);
+SPEC AG(
+	(g.open_state != open_idle) 
+	-> 
+	d_rive.transmit_state = transmit_idle & 
+	d_rive.stop_state = stop_idle
+);
+
+SPEC AG(
+	d_rive.transmit_state != transmit_idle 
+	-> g.open_state = open_idle & 
+	d_rive.stop_state = stop_idle
+);
+
+SPEC AG(
+	d_rive.stop_state != stop_idle 
+	-> g.open_state = open_idle & 
+	d_rive.transmit_state = transmit_idle
+);
+
+---------------
+--If the transmitter is resetting itself, then the transmitter does not
+--transmit nor performs a tear down.
+---------------
+
+SPEC NAME problem := AG(
+	g.RESET = 0d1_1 
+	-> 
+	t_smit.tx_state = tx_idle & 
+	t_smit.td_state = td_idle &
+	g.TEARDOWN = 0d1_0
+);
+
+---------------
+--If the transmitter transmits, then the transmitter is not performing a
+--reset.
+---------------
+
+SPEC AG(t_smit.td_state != td_idle -> g.RESET = 0d1_0);
+
+---------------
+--If the transmitter transmits, then the transmitter is not performing a
+--tear down or the tear down is waiting for the transmission to finish.
+---------------
+
+SPEC AG(
+  t_smit.tx_state != tx_idle 
+  -> 
+  (
+    (t_smit.td_state = td_idle & g.TEARDOWN = 0d1_0) | 
+    t_smit.td_state = td_waiting_for_tx
+  )
+);
+
+
+---------------
+--If the transmitter performs a tear down, then the transmitter is not
+--performing a reset.
+---------------
+
+SPEC AG (t_smit.td_state = td_idle & g.TEARDOWN= 0d1_1 -> g.RESET = 0d1_0);
+
+---------------
+--If the transmitter performs a reset, then open is currently executed.
+---------------
+
+SPEC AG (g.RESET = 0b1_1 -> g.open_state != open_idle);
+
+---------------
+--If the transmitter performs a tear down, then stop is currently exe-
+--cuted.
+---------------
+
+SPEC AG(t_smit.td_state != td_idle & g.TEARDOWN = 0b1_1 -> d_rive.stop_state != stop_idle);
+
+----------------------------------------------------------------------------
+-- 4.7 Safe dvice driver
+----------------------------------------------------------------------------
+
+--SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
+--SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
+-- REPLACEING WITH:
+SPEC NAME never_die := AG !(t_smit.dead);
+
+--SPEC NAME reach_tx_any := !(EF t_smit.tx_state != tx_idle);
+--SPEC NAME reach_td_relbd := !(EF t_smit.td_state = td_releasing_bd);
+--SPEC NAME reach_tx_relbd := !(EF t_smit.tx_state = tx_releasing_bd);
+--SPEC NAME reach_tx_fetbd := !(EF t_smit.tx_state = tx_fetching_bd);
+--SPEC NAME reach_tx_readmem := !(EF t_smit.tx_state = tx_reading_memory );
+--SPEC NAME reach_tx_wait := !(EF t_smit.td_state = td_waiting_for_tx);
+--SPEC NAME reach_dr_transmit_and_more := !(EF d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !EF(t_smit.dead = TRUE));
+
+
+--SPEC NAME reach_stop_teardown_test := !(EF d_rive.stop_state = stop_teardown_test);
+--SPEC NAME reach_teardown_clearing_td := !(EF t_smit.td_state = td_clearing_td);
+--SPEC NAME reach_transmit_check_mis_queue := !(EF d_rive.transmit_state = transmit_check_mis_queue);
+
+-- C PART
 
 
 
-
---INITIALIZATION
---NOT WORKING
---SPEC AG (EF(g.RESET = 0b1_1));
---SPEC AG (EF(g.RESET = 0b1_0)); -- & t_smit.TRANSMIT = 0b2_00);
-
---TRANSMISSION
--- a
---SPEC EF(t_smit.tx_state != tx_idle);
-
+----------------
 -- The buffer Length must not be zero
+----------------
+
 SPEC AG (t_smit.tx_state != tx_idle -> g.length != 0d2_0);
 
 -- The buffer to transmit must be completely placed in RAM. RAM starts at 1, ends at 2, inclusive.
@@ -1008,57 +1087,4 @@ SPEC AG (t_smit.tx_state != tx_idle -> g.length != 0d2_0);
 
 
 
----------------
---open(), transmit(), stop() cannot be executed simultaneously.
----------------
 
-SPEC AG(g.open_state != open_idle -> d_rive.transmit_state = transmit_idle & d_rive.stop_state = stop_idle);
-SPEC AG(d_rive.transmit_state != transmit_idle -> g.open_state = open_idle & d_rive.stop_state = stop_idle);
-SPEC AG(d_rive.stop_state != stop_idle -> g.open_state = open_idle & d_rive.transmit_state = transmit_idle);
-
---If the transmitter is resetting itself, then the transmitter does not
---transmit nor performs a tear down.
-
-SPEC NAME problem := AG(g.RESET = 0d1_1 -> t_smit.tx_state = tx_idle & g.TEARDOWN = 0d1_0);
-
---If the transmitter transmits, then the transmitter is not performing a
---reset.
-
-SPEC AG(t_smit.td_state != td_idle -> g.RESET = 0d1_0);
-
---If the transmitter transmits, then the transmitter is not performing a
---tear down or the tear down is waiting for the transmission to finish.
-
-SPEC AG(t_smit.tx_state != tx_idle -> (g.TEARDOWN = 0d1_0 | t_smit.td_state = td_waiting_for_tx))
-
---If the transmitter performs a tear down, then the transmitter is not
---performing a reset.
-
-SPEC AG (g.TEARDOWN= 0d1_1 -> g.RESET = 0d1_0)
-
---If the transmitter performs a reset, then open is currently executed.
-
-SPEC AG (g.RESET = 0b1_1 -> g.open_state != open_idle);
-
---If the transmitter performs a tear down, then stop is currently exe-
---cuted.
-
-SPEC AG(g.TEARDOWN = 0b1_1 -> d_rive.stop_state != stop_idle);
-
---SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
---SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
--- REPLACEING WITH:
-SPEC NAME never_die := AG !(t_smit.dead);
-
---SPEC NAME reach_tx_any := !(EF t_smit.tx_state != tx_idle);
---SPEC NAME reach_td_relbd := !(EF t_smit.td_state = td_releasing_bd);
---SPEC NAME reach_tx_relbd := !(EF t_smit.tx_state = tx_releasing_bd);
---SPEC NAME reach_tx_fetbd := !(EF t_smit.tx_state = tx_fetching_bd);
---SPEC NAME reach_tx_readmem := !(EF t_smit.tx_state = tx_reading_memory );
---SPEC NAME reach_tx_wait := !(EF t_smit.td_state = td_waiting_for_tx);
---SPEC NAME reach_dr_transmit_and_more := !(EF d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !EF(t_smit.dead = TRUE));
-
-
---SPEC NAME reach_stop_teardown_test := !(EF d_rive.stop_state = stop_teardown_test);
---SPEC NAME reach_teardown_clearing_td := !(EF t_smit.td_state = td_clearing_td);
---SPEC NAME reach_transmit_check_mis_queue := !(EF d_rive.transmit_state = transmit_check_mis_queue);
