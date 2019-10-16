@@ -915,33 +915,40 @@ TRANS
 TRUE;
 
 
--- CHANGE - fix the input during transmit
+-----------------------------------------------------------------------------------------
+-- 4.6 Checking correctness
+-----------------------------------------------------------------------------------------
 
-
-
+---------------
 --It is always possible for the model to sooner or later make transitions
 --that describe the operations of open(), transmit(), and stop().
+---------------
 
--- OPEN DRIVER
+SPEC NAME dr_open_can_always_start := AG EF (g.open_state != open_idle );
+SPEC NAME dr_transmit_always_can_start := AG EF (d_rive.transmit_state != transmit_idle );
+SPEC NAME dr_stop_can_always_start := AG EF (d_rive.stop_state != stop_idle);
 
+SPEC NAME dr_open_can_always_end := AG EF (g.open_state = open_idle );
+SPEC NAME dr_open_can_always_end := AG EF (d_rive.transmit_state = transmit_idle );
+SPEC NAME dr_open_can_always_end := AG EF (d_rive.stop_state = stop_idle);
+
+----------------------------------------------------
+-- These are some extra, used for debugging
 --SPEC AG (EF(g.RESET = 0b1_1 & g.HDP = 0b2_00 & d_rive.g.queue_head = 0b2_00 & d_rive.g.queue_tail = 0b2_00));
 
 SPEC NAME transmit_can_start := EF (d_rive.transmit_state != transmit_idle );
 SPEC NAME stop_can_start := EF (d_rive.stop_state != stop_idle );
-
-SPEC NAME open_can_always_start := AG EF (d_rive.g.open_state != open_idle );
-SPEC NAME transmit_always_can_start := AG EF (d_rive.transmit_state != transmit_idle );
-SPEC NAME stop_can_always_start := AG EF (d_rive.stop_state != stop_idle);
-
-SPEC AG EF (d_rive.g.open_state = open_idle );
-SPEC AG EF (d_rive.transmit_state = transmit_idle );
-SPEC AG EF (d_rive.stop_state = stop_idle);
+----------------------------------------------------
 
 
+---------------
+--It is always possible for the model to sooner or later make transitions
+--that describe the initialization, transmission and tear down operations
+--of the transmitter.
+---------------
 -- TRANSMIT DRIVER
 
-
---Easy ones:
+--Easy ones: (actually harder)
 SPEC EF(t_smit.it_state = it_resetting);
 SPEC EF(t_smit.it_state = it_waiting_hdp);
 
@@ -964,16 +971,11 @@ SPEC AG EF (t_smit.it_state = it_idle );
 SPEC AG EF (t_smit.tx_state = tx_idle );
 SPEC AG EF (t_smit.td_state = td_idle );
 
-
-
 --STOP DRIVER
 
 --SPEC AG EF(g.TEARDOWN = 0b1_1 & d_rive.g.queue_head = 0b2_00 & d_rive.g.queue_tail = 0b2_00);
 
 
---It is always possible for the model to sooner or later make transitions
---that describe the initialization, transmission and tear down operations
---of the transmitter.
 
 
 --INITIALIZATION
@@ -1010,7 +1012,9 @@ SPEC AG (t_smit.tx_state != tx_idle ->
 
 
 
+---------------
 --open(), transmit(), stop() cannot be executed simultaneously.
+---------------
 
 SPEC AG(g.open_state != open_idle -> d_rive.transmit_state = transmit_idle & d_rive.stop_state = stop_idle);
 SPEC AG(d_rive.transmit_state != transmit_idle -> g.open_state = open_idle & d_rive.stop_state = stop_idle);
