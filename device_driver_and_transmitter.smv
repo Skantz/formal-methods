@@ -152,7 +152,7 @@ next(transmit_state) := case
   next(g.open_state) = open_idle &
   transmit_state = transmit_idle &
   -- TODO But this allows for executing both stop and transmit at the same time right?
-  -- CHANGE: can't have it recursively defined
+  -- CHANGE: cant have it recursively defined
   --stop_state = stop_idle &
   --next(stop_state) = stop_idle &
   g.turn = software
@@ -205,7 +205,7 @@ next(transmit_state) := case
 esac;
 
 next(stop_state) := case 
-	-- TODO what's the policy on starting funcitons? 
+	-- TODO whats the policy on starting funcitons? 
   g.open_state = open_idle & 
   next(g.open_state) = open_idle &
   transmit_state = transmit_idle &
@@ -241,7 +241,7 @@ INVAR -- only one function can run at a time
 INVAR -- open runs first
   open_has_run | (transmit_state = transmit_idle & stop_state = stop_idle);
 
-INVAR -- open can't run after transmit
+INVAR -- open cant run after transmit
   (last_run_function != transmit) | (g.open_state = open_idle);  
 
 
@@ -320,7 +320,7 @@ next(it_state) := case
   it_state = it_idle & 
   g.RESET = 0b1_0 & 
   next(g.RESET) = 0b1_1 &
-  -- TODO personal opinion, the following two don't seem necessary. //J
+  -- TODO personal opinion, the following two dont seem necessary. //J
   g.open_state = open_set_reset & 
   next(g.open_state) = open_reset_test &
   g.turn = software
@@ -509,7 +509,7 @@ next(g.RESET) := case
   TRUE: g.RESET;
 esac;
 
--- TODO So uh we're just doing nondet trnasitions?
+-- TODO So uh were just doing nondet trnasitions?
 --next(g.turn) :=
 --  case
 --    next(t_smit.td_state) != td_idle: HW_td;
@@ -575,7 +575,7 @@ next(g.HDP) := case
   TRUE: g.HDP;
 esac;
 
--- TODO LJ from here on I'm being less strict with checking
+-- TODO LJ from here on Im being less strict with checking
 next(g.TEARDOWN) := case
   d_rive.stop_state = stop_set_teardown & 
   next(d_rive.stop_state) = stop_teardown_test & 
@@ -663,7 +663,7 @@ next(g.queue_tail) := case
   : 
   g.new_bd;
 
-  --CHANGE: This will never happen because stop update g.queue_ doesn't exist. Removing.
+  --CHANGE: This will never happen because stop update g.queue_ doesnt exist. Removing.
   --stop_state = stop_update_queue &
     --next(stop_state) = stop_idle &
     --g.turn = software: 0b2_00;
@@ -835,62 +835,45 @@ next(g.HW_MEMORY_OWN[3]) := case
 
 
 
------------- ------------ ------------ ------------ ------------ ------------ 
--- TODO I wanst to replace this with a TRANS
------------- ------------ ------------ ------------ ------------ ------------ 
-next(g.HW_MEMORY_EOQ[0]) := case
-   g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software:  0b1_0;
+#define EOQ_TRANSITION(index)                                                   \
+next(g.HW_MEMORY_EOQ[index]) := case                                            \
+  g.turn = software &                                                           \
+  g.new_bd = uwconst(index, 2) &                                                            \
+  d_rive.transmit_state = transmit_updated_new_bd                               \
+  :                                                                             \
+  0b1_0;                                                                        \
+                                                                                \
+  g.HDP = uwconst(index, 2) &                                                               \
+  t_smit.tx_state = tx_setting_eoq_or_releasing_bd &                            \
+  g.HW_MEMORY_NDP[g.HDP] = 0b2_00 &                                             \
+  g.turn = HW_tx                                                                \
+  :                                                                             \
+  0b1_1;                                                                        \
+                                                                                \
+  g.turn = HW_td &                                                              \
+  g.HDP = uwconst(index, 2) &                                                               \
+  t_smit.td_state = td_waiting_for_tx &                                         \
+  t_smit.tx_state = tx_idle &                                                   \
+  g.HDP != 0b2_00                                                               \
+  :                                                                             \
+  0b1_1;                                                                        \
+                                                                                \
+  g.turn = software &                                                           \
+  uwconst(index, 2) = 0b2_01 &                                                              \
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & \
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &                                   \
+  g.HDP = 0b2_00                                                                \
+  :                                                                             \
+  0b1_0;                                                                        \
+                                                                                \
+  TRUE: g.HW_MEMORY_EOQ[index];                                                 \
+esac; 
 
-
-   g.HDP = 0d2_0 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] = 0b2_00 & g.turn = HW_tx: 0b1_1;
-   g.HDP = 0d2_0 & t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & g.HDP != 0b2_00 & g.turn = HW_td: 0b1_1;
-
-
-  TRUE: g.HW_MEMORY_EOQ[0];
-  esac;
-
-
-
-next(g.HW_MEMORY_EOQ[1]) := case
-
-   d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: 0b1_0;
-
-
-   g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software:  0b1_0;
-
-
-   g.HDP = 0d2_1 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] = 0b2_00 & g.turn = HW_tx: 0b1_1;
-   g.HDP = 0d2_1 & t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & g.HDP != 0b2_00 & g.turn = HW_td: 0b1_1;
-  TRUE: g.HW_MEMORY_EOQ[1];
-  esac;
-
-next(g.HW_MEMORY_EOQ[2]) := case
-
-   g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software:  0b1_0;
-
-   g.HDP = 0d2_2 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] = 0b2_00 & g.turn = HW_tx: 0b1_1;
-   g.HDP = 0d2_2 & t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & g.HDP != 0b2_00 & g.turn = HW_td: 0b1_1;
-
-  TRUE: g.HW_MEMORY_EOQ[2];
-  esac;
-
-
-next(g.HW_MEMORY_EOQ[3]) := case
-
-   g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software:  0b1_0;
-
-
-
-   g.HDP = 0d2_3 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] = 0b2_00 & g.turn = HW_tx: 0b1_1;
-   g.HDP = 0d2_3 & t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & g.HDP != 0b2_00 & g.turn = HW_td: 0b1_1;
-
-
-
-  TRUE: g.HW_MEMORY_EOQ[3];
-  esac;
------------- ------------ ------------ ------------ ------------ ------------ 
-
-
+EOQ_TRANSITION(0)
+EOQ_TRANSITION(1)
+EOQ_TRANSITION(2)
+EOQ_TRANSITION(3)
+#undef EOQ_TRANSITION                                                 
 
 
 INVAR
