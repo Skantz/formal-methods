@@ -1041,5 +1041,7 @@ SPEC AG (g.RESET = 0b1_1 -> g.open_state != open_idle);
 
 SPEC AG(g.TEARDOWN = 0b1_1 -> d_rive.stop_state != stop_idle);
 
-SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
-SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
+--SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
+--SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
+-- REPLACEING WITH:
+SPEC NAME never_die := AG !(t_smit.dead);
