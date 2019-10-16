@@ -1055,7 +1055,7 @@ SPEC NAME reach_td_relbd := !(EF t_smit.td_state = td_releasing_bd);
 SPEC NAME reach_tx_relbd := !(EF t_smit.tx_state = tx_releasing_bd);
 SPEC NAME reach_tx_fetbd := !(EF t_smit.tx_state = tx_fetching_bd);
 SPEC NAME reach_tx_readmem := !(EF t_smit.tx_state = tx_reading_memory );
-SPEC NAME reach_tx_wait := !(EF t_smit.tx_state = td_waiting_for_tx);
+SPEC NAME reach_tx_wait := !(EF t_smit.td_state = td_waiting_for_tx);
 SPEC NAME reach_dr_transmit_and_more := !(EF d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !EF(t_smit.dead = TRUE));
 
 
