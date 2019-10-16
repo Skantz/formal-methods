@@ -1039,6 +1039,24 @@ SPEC AG(t_smit.td_state != td_idle & g.TEARDOWN = 0b1_1 -> d_rive.stop_state != 
 -- 4.7 Safe dvice driver
 ----------------------------------------------------------------------------
 
+-- 1. the NDP at queue head must not be 0 unless the queue has only one element
+-- or queue is not in use (set to 0)
+
+SPEC AG (
+	g.queue_head = 0b2_00 |
+	g.HW_MEMORY_NDP[g.queue_head] != 0b2_00 |
+	g.queue_head = g.queue_tail
+);
+
+-- 2. transmitter must never enter into dead state
+SPEC AG (t_smit.dead != TRUE);
+
+
+
+----------------------------------------------------------------------------
+-- 4.8 C PART
+----------------------------------------------------------------------------
+
 --SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
 --SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
 -- REPLACEING WITH:
@@ -1057,7 +1075,6 @@ SPEC NAME never_die := AG !(t_smit.dead);
 --SPEC NAME reach_teardown_clearing_td := !(EF t_smit.td_state = td_clearing_td);
 --SPEC NAME reach_transmit_check_mis_queue := !(EF d_rive.transmit_state = transmit_check_mis_queue);
 
--- C PART
 
 
 
