@@ -168,6 +168,13 @@ next(transmit_state) := case
   :
   transmit_bad_buffer_or_queue_full_or_not_queue_full;
 
+  -- TODO Added this from pseudocode, not in original transitions. Tell daniel.
+  transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+  TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
+  g.turn = software
+  :
+  transmit_idle;
+
   transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
   !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & 
   g.HDP = 0b2_00 & 
@@ -176,98 +183,110 @@ next(transmit_state) := case
   transmit_idle;
 
   transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-  !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP != 0b2_00 & g.turn = software:
+  !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & 
+  g.HDP != 0b2_00 & 
+  g.turn = software
+  :
   transmit_updated_new_bd;
 
-  transmit_state = transmit_updated_new_bd & g.turn = software:
+  transmit_state = transmit_updated_new_bd & 
+  g.turn = software
+  :
   transmit_check_mis_queue;
 
-  transmit_state = transmit_check_mis_queue & g.turn = software:
+  transmit_state = transmit_check_mis_queue & 
+  g.turn = software
+  :
   transmit_idle;
 
-    TRUE: transmit_state;
-  esac;
+  TRUE
+  : 
+  transmit_state;
+esac;
 
+next(stop_state) := case 
+	-- TODO what's the policy on starting funcitons? 
+  g.open_state = open_idle & 
+  next(g.open_state) = open_idle &
+  transmit_state = transmit_idle &
+  next(transmit_state) = transmit_idle &
+  stop_state = stop_idle & 
+  g.turn = software
+  : 
+  {stop_idle, stop_set_teardown};
 
+  stop_state = stop_set_teardown & 
+  g.turn = software
+  : 
+  stop_teardown_test;
 
+  stop_state = stop_teardown_test & 
+  -- This next line was missing from pseudocode new var info
+  g.TEARDOWN = 0b1_0 & 
+  g.turn = software
+  : 
+  stop_idle;
 
+  TRUE
+  : 
+  stop_state;
+esac;
 
-next(stop_state) := 
-  case 
-	g.open_state = open_idle & next(g.open_state) = open_idle &
- 			transmit_state = transmit_idle &
- 			next(transmit_state) = transmit_idle &
-  -- CHANGE: stop write td doesn't exist? 
- 			stop_state = stop_idle & g.turn = software
-	: 
-	{stop_idle, stop_set_teardown};--stop_write_td union stop_idle;
-	stop_state = stop_set_teardown & g.turn = software: stop_teardown_test;
-	stop_state = stop_teardown_test & 
-		-- This next line was missing from pseudocode new var info
-	g.TEARDOWN = 0b1_0 & 
-	g.turn = software: stop_idle;
-  TRUE: stop_state;
-  esac;
-
-
-INVAR
- -- only one function can run at a time
- ((g.open_state != open_idle & transmit_state = transmit_idle & stop_state = stop_idle ) |
+INVAR -- only one function can run at a time
+  (g.open_state != open_idle & transmit_state = transmit_idle & stop_state = stop_idle ) |
   (g.open_state = open_idle & transmit_state != transmit_idle & stop_state = stop_idle ) |
   (g.open_state = open_idle & transmit_state = transmit_idle & stop_state != stop_idle ) |
-  (g.open_state = open_idle & transmit_state = transmit_idle & stop_state = stop_idle )) &
-  -- open runs first
-    (open_has_run | (transmit_state = transmit_idle & stop_state = stop_idle)) &
-  -- open can't run after transmit
-    ((last_run_function != transmit) | (g.open_state = open_idle));  
+  (g.open_state = open_idle & transmit_state = transmit_idle & stop_state = stop_idle );
 
+INVAR -- open runs first
+  open_has_run | (transmit_state = transmit_idle & stop_state = stop_idle);
 
-
+INVAR -- open can't run after transmit
+  (last_run_function != transmit) | (g.open_state = open_idle);  
 
 
 MODULE transmitter(g)
 VAR
-  it_state: {it_idle, it_resetting, it_waiting_hdp};
-  tx_state: {tx_idle, tx_fetching_bd, tx_reading_memory, tx_setting_eoq_or_releasing_bd, tx_releasing_bd};
-  td_state: {td_idle, td_waiting_for_tx, td_releasing_bd, td_clearing_td};
+  it_state: {
+	it_idle, 
+	it_resetting, 
+	it_waiting_hdp
+  };
+  tx_state: {
+	tx_idle, 
+	tx_fetching_bd, 
+	tx_reading_memory, 
+	tx_setting_eoq_or_releasing_bd, 
+	tx_releasing_bd
+  };
+  td_state: {
+	td_idle, 
+	td_waiting_for_tx, 
+	td_releasing_bd, 
+	td_clearing_td
+  };
   dead: boolean;
-
   last_run_function: {none, it, tx, td};
-
   it_has_run: boolean;
-  --g.turn: {g.HW_init, HW_tx, HW_td, g.HW_init};
 
 DEFINE
-        TX_BUFFER_OVERFLOW := g.HW_MEMORY_BP[g.HDP] + g.HW_MEMORY_BL[g.HDP] < g.HW_MEMORY_BP[g.HDP];
-        TX_BUFFER_INSIDE_RAM := g.RAM_START <= g.HW_MEMORY_BP[g.HDP] & g.HW_MEMORY_BP[g.HDP] + g.HW_MEMORY_BL[g.HDP] - 0b2_01 <= g.RAM_END;
-	HW_MEMORY_START := 0b2_01;
-	HW_MEMORY_END := 0b2_11;
-	RAM_START := 0b2_01;
-	RAM_END := 0b2_10;
-
---INVAR
- --	Initialization works as follows. Write 1 to g.RESET. The transmitter then
- --	resets itself. When the transmitter has finished the resetting, g.RESET is
- --	set to 0. Then the software writes zero to g.HDP. This sequence of steps
- --	initializes the transmitter. Any other sequence operations during
- --	initialization is erronous.
- -- (it_state = it_idle | (tx_state = tx_idle & td_state = td_idle)) &
- -- -- If the transmitter performs a reset, then open is currently executed
- -- (g.RESET = 0d1_0 | g.open_state != open_idle) &
-  -- If the transmitter performs a tear down, then the transmitter is not
-  --performing a reset.
- -- (g.TEARDOWN = 0d1_0 | g.RESET = 0d1_0) &
- -- (g.RESET = 0d1_0 | (g.TEARDOWN = 0d1_0 & tx_state = tx_idle)) &
-  -- CHANGE: require init runs first
- -- ((tx_state = tx_idle & td_state = td_idle) | it_has_run);
- 
+  TX_BUFFER_OVERFLOW := 
+	g.HW_MEMORY_BP[g.HDP] + g.HW_MEMORY_BL[g.HDP] < g.HW_MEMORY_BP[g.HDP];
+  TX_BUFFER_INSIDE_RAM := 
+	g.RAM_START <= g.HW_MEMORY_BP[g.HDP] & 
+	g.HW_MEMORY_BP[g.HDP] + g.HW_MEMORY_BL[g.HDP] - 0b2_01 <= g.RAM_END;
+  HW_MEMORY_START := 0b2_01;
+  HW_MEMORY_END := 0b2_11;
+  RAM_START := 0b2_01;
+  RAM_END := 0b2_10;
 
 ASSIGN
   init(it_state) := it_idle;
   init(tx_state) := tx_idle;
   init(td_state) := td_idle;
-  --init(stop_state) := stop_idle;
   init(dead) := FALSE;
+  init(last_run_function) := none;
+  init(it_has_run) := FALSE;
 
 next(it_has_run) :=
   case
@@ -352,6 +371,24 @@ next(td_state) :=
     TRUE: td_state;
   esac;
 
+
+
+--INVAR
+ --	Initialization works as follows. Write 1 to g.RESET. The transmitter then
+ --	resets itself. When the transmitter has finished the resetting, g.RESET is
+ --	set to 0. Then the software writes zero to g.HDP. This sequence of steps
+ --	initializes the transmitter. Any other sequence operations during
+ --	initialization is erronous.
+ -- (it_state = it_idle | (tx_state = tx_idle & td_state = td_idle)) &
+ -- -- If the transmitter performs a reset, then open is currently executed
+ -- (g.RESET = 0d1_0 | g.open_state != open_idle) &
+  -- If the transmitter performs a tear down, then the transmitter is not
+  --performing a reset.
+ -- (g.TEARDOWN = 0d1_0 | g.RESET = 0d1_0) &
+ -- (g.RESET = 0d1_0 | (g.TEARDOWN = 0d1_0 & tx_state = tx_idle)) &
+  -- CHANGE: require init runs first
+ -- ((tx_state = tx_idle & td_state = td_idle) | it_has_run);
+ 
 
 
 
