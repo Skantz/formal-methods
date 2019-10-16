@@ -518,6 +518,7 @@ esac;
 --    next(d_rive.g.open_state) != open_idle | d_rive.transmit_state != transmit_idle | d_rive.stop_state != stop_idle: software;
 --    TRUE: g.turn;
 --  esac;
+next(g.turn) := {HW_td, HW_tx, HW_init, software};
 
 next(g.new_bd) := case
   d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
@@ -864,7 +865,7 @@ INVAR
 
 --If the transmitter is resetting itself, then the transmitter does not
 --transmit nor performs a tear down.
-(g.RESET = 0d1_0 | (t_smit.tx_state = td_idle & g.TEARDOWN = 0d1_0)) &
+--CHNG (g.RESET = 0d1_0 | (t_smit.tx_state = td_idle & g.TEARDOWN = 0d1_0)) &
 
 -- No wrong states allowed
 --CHNG !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !t_smit.TX_BUFFER_OVERFLOW &
@@ -896,6 +897,16 @@ TRANS
 --GHNG    (g.HDP = next(g.HDP) | (t_smit.tx_state = tx_idle & t_smit.it_state = it_idle & t_smit.td_state = td_idle)) & 
     --Writing g.TEARDOWN during initialization or teardown is an error.
 --GHNG    (g.TEARDOWN = next(g.TEARDOWN) | (t_smit.it_state = it_idle & t_smit.td_state = td_idle)); 
+
+  (
+    d_rive.transmit_state = transmit_idle & 
+    next(d_rive.transmit_state) != transmit_idle
+  ) 
+  | 
+  (
+    g.pa = next(g.pa) & 
+    g.length = next(g.length)
+  ) &
 
 TRUE;
 
