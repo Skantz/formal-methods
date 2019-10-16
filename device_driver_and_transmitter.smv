@@ -8,129 +8,182 @@ VAR
   RESET: word[1];
   HDP: word[2];
   TEARDOWN: word[1];
-  --CHANGE: what does TRANSMIT even do?
-  --TRANSMIT: word[2];
+  open_state: {
+	open_idle, 
+	open_set_reset, 
+	open_reset_test, 
+	open_clear_hdp, 
+	open_clear_queue
+  };
+  turn: {
+	software, 
+	HW_tx, 
+	HW_td, 
+	HW_init
+  };
   HW_MEMORY_NDP: array 0..3 of word[2];
   HW_MEMORY_BP: array 0..3 of word[2];
   HW_MEMORY_BL: array 0..3 of word[2];
   HW_MEMORY_OWN: array 0..3 of word[1];
   HW_MEMORY_EOQ: array 0..3 of word[1];
-  open_state: {open_idle, open_set_reset, open_reset_test, open_clear_hdp, open_clear_queue};
-  turn: {software, HW_tx, HW_td, HW_init};
   pa: word[2];
   length: word[2];
-  queue__head: word[2];
-  queue__tail: word[2];
+  queue_head: word[2];
+  queue_tail: word[2];
   new_bd: word[2]; 
 
 
 
 MODULE device_driver(g)
 VAR
-  --g.queue__head: word[2];
-  --g.queue__tail: word[2];
-  --g.new_bd: word[2];
-  --CHANGE? transmit_start is removed from transmit state
-  transmit_state: {transmit_idle,  transmit_update_queue, transmit_bad_buffer_or_queue_full_or_not_queue_full,
-                   transmit_updated_new_bd, transmit_check_mis_queue};
-  --CHANGE: stop write td doesn't exist - removing it
-  --stop update g.queue_ doesn't exist but is used?
-  stop_state: {stop_idle, stop_set_teardown, stop_teardown_test}; --stop_update_queue};
-  --dead: boolean;
-  last_run_function: {none, open, transmit, stop};
+  -- TODO move open_state here?
+  transmit_state: {
+	transmit_idle,  
+	transmit_update_queue, 
+	transmit_bad_buffer_or_queue_full_or_not_queue_full,
+	transmit_updated_new_bd, 
+	transmit_check_mis_queue
+  };
+  stop_state: {
+	stop_idle, 
+	stop_set_teardown, 
+	stop_teardown_test
+  };
+  last_run_function: {
+	none, 
+	open, 
+	transmit, 
+	stop
+  };
   open_has_run: boolean;
 
 DEFINE
-  TRANSMIT_OVERFLOW := g.pa + g.length < g.pa;
-  TRANSMIT_LENGTH_EQ_ZERO := g.length = 0d2_0;
-
-  TRANSMIT_INSIDE_RAM := g.RAM_START <= g.pa & g.pa + g.length - 0b2_01 <= g.RAM_END;
+  TRANSMIT_OVERFLOW := 
+	g.pa + g.length < g.pa;
+  TRANSMIT_LENGTH_EQ_ZERO := 
+	g.length = 0d2_0;
+  TRANSMIT_INSIDE_RAM := 
+	g.RAM_START <= g.pa & 
+	g.pa + g.length - 0b2_01 <= g.RAM_END;
   TRANSMIT_QUEUE_FULL :=
-	(g.queue__head < g.queue__tail &
-	 g.queue__head = g.HW_MEMORY_START & g.queue__tail = g.HW_MEMORY_END) |
-	(g.queue__tail < g.queue__head & g.queue__tail + 0b2_01 = g.queue__head);
-  TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL := TRANSMIT_OVERFLOW |
-	TRANSMIT_LENGTH_EQ_ZERO | !TRANSMIT_INSIDE_RAM | TRANSMIT_QUEUE_FULL;
-
-INVAR
- -- only one function can run at a time
- ((g.open_state != open_idle & transmit_state = transmit_idle & stop_state = stop_idle ) |
-  (g.open_state = open_idle & transmit_state != transmit_idle & stop_state = stop_idle ) |
-  (g.open_state = open_idle & transmit_state = transmit_idle & stop_state != stop_idle ) |
-  (g.open_state = open_idle & transmit_state = transmit_idle & stop_state = stop_idle )) &
-  -- open runs first
-    (open_has_run | (transmit_state = transmit_idle & stop_state = stop_idle)) &
-  -- open can't run after transmit
-    ((last_run_function != transmit) | (g.open_state = open_idle));  
+	(
+	  g.queue_head < g.queue_tail &
+	  g.queue_head = g.HW_MEMORY_START & 
+	  g.queue_tail = g.HW_MEMORY_END
+	) | (
+	  g.queue_tail < g.queue_head & 
+	  g.queue_tail + 0b2_01 = g.queue_head
+	);
+  TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL := 
+	TRANSMIT_OVERFLOW |
+	TRANSMIT_LENGTH_EQ_ZERO | !
+	TRANSMIT_INSIDE_RAM | 
+	TRANSMIT_QUEUE_FULL;
 
 ASSIGN
-  --init(g.open_state) := open_idle;
+  -- TODO is open_state initualized anywhere?
+  -- TODO is dead initualized anywhere?
   init(transmit_state) := transmit_idle;
   init(stop_state) := stop_idle;
-  --init(dead) := FALSE;
+  -- TODO what does this comment mean?
   -- The open state is g.turned on at power on
   init(open_has_run) := FALSE; 
   init(last_run_function) := none;
 
+next(open_has_run) := case
+  g.open_state = open_reset_test & 
+  next(g.open_state) = open_idle
+  : 
+  TRUE;
 
-next(open_has_run) :=
-  case
-    g.open_state = open_reset_test & next(g.open_state) = open_idle: TRUE;
-    TRUE: open_has_run;
-  esac;
+  TRUE
+  : 
+  open_has_run;
+esac;
 
-next(last_run_function) :=
-  case
-    g.open_state != open_idle & next(g.open_state) = open_idle: open;
-    transmit_state != transmit_idle & next(transmit_state) = transmit_idle: transmit;
-    stop_state != stop_idle & next(stop_state) = stop_idle: stop;
-    TRUE: last_run_function;
-  esac;
+next(last_run_function) := case
+  g.open_state != open_idle & 
+  next(g.open_state) = open_idle
+  : 
+  open;
 
-next(g.open_state) := 
-  case
-    g.open_state = open_idle & 
-                       --transmit_state = transmit_idle & next(transmit_state) = transmit_idle & 
-                       --stop_state = stop_idle & next(stop_state) = stop_idle &
-                       g.turn = software: {open_set_reset, open_idle};
-       g.open_state = open_set_reset & g.turn = software: open_reset_test;
-       g.open_state = open_reset_test & g.RESET != 0b1_1 & g.turn = software: open_idle;
-       TRUE: g.open_state;
-  esac;
+  transmit_state != transmit_idle & 
+  next(transmit_state) = transmit_idle
+  : 
+  transmit;
 
+  stop_state != stop_idle & 
+  next(stop_state) = stop_idle
+  : 
+  stop;
 
+  TRUE
+  : 
+  last_run_function;
+esac;
 
-next(transmit_state) := 
-  case
+next(g.open_state) := case
+  -- TODO do we want to stop open from runninng while another active? Seems like a good place...
+  g.open_state = open_idle & 
+  --transmit_state = transmit_idle & next(transmit_state) = transmit_idle & 
+  --stop_state = stop_idle & next(stop_state) = stop_idle &
+  g.turn = software
+  : 
+  {open_set_reset, open_idle};
 
-		g.open_state = open_idle & next(g.open_state) = open_idle &
-			transmit_state = transmit_idle &
-                        -- CHANGE: can't have it recursively defined
-                        --stop_state = stop_idle &
-			--next(stop_state) = stop_idle &
-                        g.turn = software:
-                        -- CHANGE: transmit_start is not defined. Change it to update_queue.
-                        {transmit_update_queue, transmit_idle};
+  g.open_state = open_set_reset & 
+  g.turn = software
+  : 
+  open_reset_test;
 
-	
-		transmit_state = transmit_update_queue &
-			!(g.queue__head != 0b2_00 & g.HW_MEMORY_OWN[g.queue__head] = 0b1_0) &
-			g.turn = software:
-                        transmit_bad_buffer_or_queue_full_or_not_queue_full;
-	
-		transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-			!TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software:
-			transmit_idle;
-	
-		transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-			!TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP != 0b2_00 & g.turn = software:
-			transmit_updated_new_bd;
-	
-		transmit_state = transmit_updated_new_bd & g.turn = software:
-			transmit_check_mis_queue;
-	
-		transmit_state = transmit_check_mis_queue & g.turn = software:
-			transmit_idle;
+  g.open_state = open_reset_test & 
+  g.RESET != 0b1_1 & 
+  g.turn = software
+  : 
+  open_idle;
+
+  TRUE
+  : 
+  g.open_state;
+esac;
+
+next(transmit_state) := case
+  g.open_state = open_idle & 
+  next(g.open_state) = open_idle &
+  transmit_state = transmit_idle &
+  -- TODO But this allows for executing both stop and transmit at the same time right?
+  -- CHANGE: can't have it recursively defined
+  --stop_state = stop_idle &
+  --next(stop_state) = stop_idle &
+  g.turn = software
+  :
+  {transmit_update_queue, transmit_idle};
+
+  transmit_state = transmit_update_queue &
+  !(
+	g.queue_head != 0b2_00 & 
+	g.HW_MEMORY_OWN[g.queue_head] = 0b1_0
+  ) &
+  g.turn = software
+  :
+  transmit_bad_buffer_or_queue_full_or_not_queue_full;
+
+  transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+  !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & 
+  g.HDP = 0b2_00 & 
+  g.turn = software
+  :
+  transmit_idle;
+
+  transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+  !TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP != 0b2_00 & g.turn = software:
+  transmit_updated_new_bd;
+
+  transmit_state = transmit_updated_new_bd & g.turn = software:
+  transmit_check_mis_queue;
+
+  transmit_state = transmit_check_mis_queue & g.turn = software:
+  transmit_idle;
 
     TRUE: transmit_state;
   esac;
@@ -156,6 +209,17 @@ next(stop_state) :=
   TRUE: stop_state;
   esac;
 
+
+INVAR
+ -- only one function can run at a time
+ ((g.open_state != open_idle & transmit_state = transmit_idle & stop_state = stop_idle ) |
+  (g.open_state = open_idle & transmit_state != transmit_idle & stop_state = stop_idle ) |
+  (g.open_state = open_idle & transmit_state = transmit_idle & stop_state != stop_idle ) |
+  (g.open_state = open_idle & transmit_state = transmit_idle & stop_state = stop_idle )) &
+  -- open runs first
+    (open_has_run | (transmit_state = transmit_idle & stop_state = stop_idle)) &
+  -- open can't run after transmit
+    ((last_run_function != transmit) | (g.open_state = open_idle));  
 
 
 
@@ -358,8 +422,8 @@ ASSIGN
   -- My assumption
   init(g.turn) := software;
   --init(g.length) := 0d2_00;
-  --init(g.queue__tail) := 0d2_00;
-  --init(g.queue__head) := 0d2_00;
+  --init(g.queue_tail) := 0d2_00;
+  --init(g.queue_head) := 0d2_00;
   --init(g.HW_MEMORY_OWN[0]) := 0d1_00;
   --init(g.HW_MEMORY_OWN[1]) := 0d1_00;
   --init(g.HW_MEMORY_OWN[2]) := 0d1_00;
@@ -410,11 +474,11 @@ next(g.new_bd) :=
   case
     d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
     !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP != 0b2_00 &
-    g.queue__tail = g.HW_MEMORY_END & g.turn = software: g.HW_MEMORY_START;
+    g.queue_tail = g.HW_MEMORY_END & g.turn = software: g.HW_MEMORY_START;
 
     d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
     !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP != 0b2_00 &
-    g.queue__tail != g.HW_MEMORY_END & g.turn = software: g.queue__tail + 0b2_01;
+    g.queue_tail != g.HW_MEMORY_END & g.turn = software: g.queue_tail + 0b2_01;
     TRUE: g.new_bd;
   esac;
 
@@ -429,9 +493,9 @@ next(g.HDP) :=
       !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: g.HW_MEMORY_START;
 
     d_rive.transmit_state = transmit_check_mis_queue &
- 			g.HW_MEMORY_OWN[g.queue__tail] = 0b1_0 &
- 			g.HW_MEMORY_EOQ[g.queue__tail] = 0b1_1 &
- 			g.HW_MEMORY_NDP[g.queue__tail] != 0b2_00 & g.turn = software:
+ 			g.HW_MEMORY_OWN[g.queue_tail] = 0b1_0 &
+ 			g.HW_MEMORY_EOQ[g.queue_tail] = 0b1_1 &
+ 			g.HW_MEMORY_NDP[g.queue_tail] != 0b2_00 & g.turn = software:
  			g.new_bd;
 
     t_smit.tx_state = tx_setting_eoq_or_releasing_bd &
@@ -451,7 +515,7 @@ next(g.HDP) :=
 
 next(g.HW_MEMORY_NDP[0]) :=
   case
-  g.queue__tail = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd; 
+  g.queue_tail = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd; 
   g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
   TRUE: g.HW_MEMORY_NDP[0];
   esac;
@@ -462,7 +526,7 @@ next(g.HW_MEMORY_NDP[g.HW_MEMORY_START]) :=
     d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
       !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: 0b2_00;
 
-    g.queue__tail = 0d2_01 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
+    g.queue_tail = 0d2_01 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
     g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
     TRUE: g.HW_MEMORY_NDP[g.HW_MEMORY_START];
   esac;
@@ -470,7 +534,7 @@ next(g.HW_MEMORY_NDP[g.HW_MEMORY_START]) :=
 
 next(g.HW_MEMORY_NDP[2]) :=
   case
-    g.queue__tail = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
+    g.queue_tail = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
     g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
     TRUE: g.HW_MEMORY_NDP[2];
   esac;
@@ -478,7 +542,7 @@ next(g.HW_MEMORY_NDP[2]) :=
 
 next(g.HW_MEMORY_NDP[3]) :=
   case
-    g.queue__tail = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
+    g.queue_tail = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
     g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
     TRUE: g.HW_MEMORY_NDP[3];
   esac;
@@ -660,44 +724,44 @@ next(g.HW_MEMORY_BP[3]) :=
     TRUE: g.HW_MEMORY_BP[3];
   esac;
 
-next(g.queue__head) :=
+next(g.queue_head) :=
   case
     g.open_state = open_reset_test &
       next(g.open_state) = open_idle &
       g.turn = software: 0b2_00;
 
     d_rive.transmit_state = transmit_update_queue &
-      g.queue__head != 0d2_0 &
-      g.HW_MEMORY_OWN[g.queue__head] = 0b1_0 &
-      g.turn = software: g.HW_MEMORY_NDP[g.queue__head];
+      g.queue_head != 0d2_0 &
+      g.HW_MEMORY_OWN[g.queue_head] = 0b1_0 &
+      g.turn = software: g.HW_MEMORY_NDP[g.queue_head];
 
     !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
       g.HDP = 0b2_00 &
       g.turn = software: g.HW_MEMORY_START;
 
     d_rive.transmit_state = transmit_check_mis_queue &
-                        g.HW_MEMORY_OWN[g.queue__tail] = 0b1_0 &
-                        g.HW_MEMORY_EOQ[g.queue__tail] = 0b1_1 &
-                        g.HW_MEMORY_NDP[g.queue__tail] != 0b2_00 &
+                        g.HW_MEMORY_OWN[g.queue_tail] = 0b1_0 &
+                        g.HW_MEMORY_EOQ[g.queue_tail] = 0b1_1 &
+                        g.HW_MEMORY_NDP[g.queue_tail] != 0b2_00 &
                         g.turn = software: g.new_bd;
 
     d_rive.stop_state = stop_teardown_test &
       next(d_rive.stop_state) = stop_idle &
       g.turn = software: 0b2_00;
 
-  TRUE: g.queue__head;
+  TRUE: g.queue_head;
   esac;
 
 
 
-next(g.queue__tail) :=
+next(g.queue_tail) :=
   case
   d_rive.g.open_state = open_reset_test &
     next(g.open_state) = open_idle &
     g.turn = software: 0b2_00;
   d_rive.transmit_state = transmit_update_queue &
-    !(g.queue__head != 0d2_0 & g.HW_MEMORY_OWN[g.queue__head] = 0b1_0) &
-    g.queue__head = 0b2_00 & g.turn = software: 0b2_00;
+    !(g.queue_head != 0d2_0 & g.HW_MEMORY_OWN[g.queue_head] = 0b1_0) &
+    g.queue_head = 0b2_00 & g.turn = software: 0b2_00;
   d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
     !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
     g.HDP = 0b2_00 & g.turn = software: g.HW_MEMORY_START;
@@ -707,7 +771,7 @@ next(g.queue__tail) :=
   --stop_state = stop_update_queue &
     --next(stop_state) = stop_idle &
     --g.turn = software: 0b2_00;
-  TRUE: g.queue__tail;
+  TRUE: g.queue_tail;
   esac;
 
 
@@ -721,7 +785,7 @@ next(g.queue__tail) :=
 
 -- OPEN DRIVER
 
---SPEC AG (EF(g.RESET = 0b1_1 & g.HDP = 0b2_00 & d_rive.g.queue__head = 0b2_00 & d_rive.g.queue__tail = 0b2_00));
+--SPEC AG (EF(g.RESET = 0b1_1 & g.HDP = 0b2_00 & d_rive.g.queue_head = 0b2_00 & d_rive.g.queue_tail = 0b2_00));
 
 SPEC NAME transmit_can_start := EF (d_rive.transmit_state != transmit_idle );
 SPEC NAME stop_can_start := EF (d_rive.stop_state != stop_idle );
@@ -765,7 +829,7 @@ SPEC AG EF (t_smit.td_state = td_idle );
 
 --STOP DRIVER
 
---SPEC AG EF(g.TEARDOWN = 0b1_1 & d_rive.g.queue__head = 0b2_00 & d_rive.g.queue__tail = 0b2_00);
+--SPEC AG EF(g.TEARDOWN = 0b1_1 & d_rive.g.queue_head = 0b2_00 & d_rive.g.queue_tail = 0b2_00);
 
 
 --It is always possible for the model to sooner or later make transitions
