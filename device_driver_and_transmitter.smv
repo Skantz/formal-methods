@@ -785,52 +785,42 @@ next(g.HW_MEMORY_BL[3]) := case g.new_bd = 0d2_3 & d_rive.transmit_state = trans
 ------------ ------------ ------------ ------------ ------------ ------------ 
 -- TODO I wanst to replace this with a TRANS
 ------------ ------------ ------------ ------------ ------------ ------------ 
-next(g.HW_MEMORY_OWN[0]) := case g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
 
-       g.HDP = 0d2_0 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & g.turn = HW_tx: 0b1_0;
-       g.HDP = 0d2_0 & t_smit.tx_state = tx_releasing_bd & g.turn = HW_tx: 0b1_0;
-       g.HDP = 0d2_0 & t_smit.td_state = td_releasing_bd & g.turn = HW_td: 0b1_0;
+#define OWN_TRANSITION(index)                                           \
+next(g.HW_MEMORY_OWN[index]) := case                                    \
+  g.turn = HW_tx &                                                      \
+  g.HDP = uwconst(index, 2) &                                           \
+  t_smit.tx_state = tx_setting_eoq_or_releasing_bd &                    \
+  g.HW_MEMORY_NDP[g.HDP] != 0b2_00:                                     \
+    0b1_1;                                                              \
+                                                                        \
+  g.turn = HW_tx &                                                      \
+  t_smit.tx_state = tx_releasing_bd &                                   \
+  g.HDP = 0d2_0:                                                        \
+  0b1_0;                                                                \
+                                                                        \
+  g.turn = HW_td &                                                      \
+  t_smit.td_state = td_releasing_bd &                                   \
+  g.HDP = 0d2_0:                                                        \
+  0b1_0;                                                                \
+									\
+  g.turn = software &                                                   \
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & \
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &                           \
+  g.HDP = 0b2_00 :                                                      \
+  g.HW_MEMORY_OWN[1];                                                   \
+                                                                        \
+  TRUE: g.HW_MEMORY_OWN[index];                                         \
+esac;
 
-
-    TRUE: g.HW_MEMORY_OWN[0];
-  esac;
-
-
-next(g.HW_MEMORY_OWN[1]) := case
-       d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: 0b1_1;
-
-       g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
-
-       g.HDP = 0d2_1 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & g.turn = HW_tx: 0b1_0;
-       g.HDP = 0d2_1 & t_smit.tx_state = tx_releasing_bd & g.turn = HW_tx: 0b1_0;
-       g.HDP = 0d2_1 & t_smit.td_state = td_releasing_bd & g.turn = HW_td: 0b1_0;
-
-    TRUE: g.HW_MEMORY_OWN[1];
-  esac;
-
-
-
-next(g.HW_MEMORY_OWN[2]) := case g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
-
-    -- TRANSMITTER
-
-       g.HDP = 0d2_2 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & g.turn = HW_tx: 0b1_0;
-       g.HDP = 0d2_2 & t_smit.tx_state = tx_releasing_bd & g.turn = HW_tx: 0b1_0;
-       g.HDP = 0d2_2 & t_smit.td_state = td_releasing_bd & g.turn = HW_td: 0b1_0;
-
-    TRUE: g.HW_MEMORY_OWN[2];
-  esac;
+OWN_TRANSITION(0)
+OWN_TRANSITION(1)
+OWN_TRANSITION(2)
+OWN_TRANSITION(3)
+#undef OWN_TRANSITION
 
 
-next(g.HW_MEMORY_OWN[3]) := case
-      g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
 
-       g.HDP = 0d2_3 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & g.turn = HW_tx: 0b1_0;
-       g.HDP = 0d2_3 & t_smit.tx_state = tx_releasing_bd & g.turn = HW_tx: 0b1_0;
-       g.HDP = 0d2_3 & t_smit.td_state = td_releasing_bd & g.turn = HW_td: 0b1_0;
-
-    TRUE: g.HW_MEMORY_OWN[3];
-  esac;
 ------------ ------------ ------------ ------------ ------------ ------------ 
 
 
