@@ -672,38 +672,32 @@ next(g.queue_tail) := case
 esac;
 
 
------------- ------------ ------------ ------------ ------------ ------------ 
--- TODO I wanst to replace this with a TRANS
------------- ------------ ------------ ------------ ------------ ------------ 
-next(g.HW_MEMORY_BP[0]) := case
-  g.new_bd = 0d2_0 & 
-  d_rive.transmit_state = transmit_updated_new_bd & 
-  g.turn = software
-  : 
-  g.pa;
+#define BP_MEM_TRANSITION(index)                                                  \
+next(g.HW_MEMORY_BP[index]) := case                                               \
+  g.new_bd = uwconst(index, 2) &                                                  \
+  d_rive.transmit_state = transmit_updated_new_bd &                               \
+  g.turn = software                                                               \
+  :                                                                               \
+  g.pa;                                                                           \
+                                                                                  \
+  /* special case for g.HW_MEMORY_START (1) */                                    \
+  index = 1 &                                                                     \
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &   \
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &                                     \
+  g.HDP = 0b2_00 &                                                                \
+  g.turn = software                                                               \
+  :                                                                               \
+  g.pa;                                                                           \
+                                                                                  \
+  TRUE: g.HW_MEMORY_BP[index];                                                    \
+esac;                                                                                                   
 
-  TRUE: g.HW_MEMORY_BP[0];
-esac;
+BP_MEM_TRANSITION(0)
+BP_MEM_TRANSITION(1)
+BP_MEM_TRANSITION(2)
+BP_MEM_TRANSITION(3)
 
-next(g.HW_MEMORY_BP[1]) := case
-    --special case for g.HW_MEMORY_START (1)
-    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: g.pa;
-    g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
-    TRUE: g.HW_MEMORY_BP[1];
-esac;
-
-next(g.HW_MEMORY_BP[2]) := case
-    g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
-    TRUE: g.HW_MEMORY_BP[2];
-  esac;
-
-next(g.HW_MEMORY_BP[3]) := case    
-    g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
-    TRUE: g.HW_MEMORY_BP[3];
-  esac;
------------- ------------ ------------ ------------ ------------ ------------ 
-
-
+#undef BP_MEM_TRANSITION 
 
 ------------ ------------ ------------ ------------ ------------ ------------ 
 -- TODO I wanst to replace this with a TRANS
