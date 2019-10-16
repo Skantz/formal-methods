@@ -1034,6 +1034,21 @@ SPEC AG (g.RESET = 0b1_1 -> g.open_state != open_idle);
 
 SPEC AG(t_smit.td_state != td_idle & g.TEARDOWN = 0b1_1 -> d_rive.stop_state != stop_idle);
 
+---------------
+-- Extra 1: transmit is only run after open has already been run
+---------------
+SPEC AG(d_rive.transmit_state = transmit_idle | d_rive.open_has_run);
+
+---------------
+-- Extra 2: When the driver is initializing, the transmitter is not tearing down
+---------------
+SPEC AG(g.open_state = open_idle | t_smit.td_state = td_idle);
+
+---------------
+-- Extra 3: After stop has run, it is possible to start transmitting
+---------------
+SPEC EF(d_rive.last_run_function = stop & d_rive.transmit_state != transmit_idle)
+
 ----------------------------------------------------------------------------
 -- 4.7 Safe dvice driver
 ----------------------------------------------------------------------------
@@ -1143,8 +1158,8 @@ SPEC AG(
       g.HDP = 0b2_00)
   ));
 ----------------
--- Rest... (ironic)
-AG(g.turn = software & g.turn != software)
+-- Rest... (sarcastic)
+SPEC AG(g.turn = software | g.turn != software)
 ----------------
 
 
