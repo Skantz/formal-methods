@@ -288,88 +288,154 @@ ASSIGN
   init(last_run_function) := none;
   init(it_has_run) := FALSE;
 
-next(it_has_run) :=
+next(it_has_run) := case
+  it_state != it_idle & 
+  next(it_state) = it_idle
+  : 
+  TRUE;
+
+  TRUE : it_has_run;
+esac;
+
+next(last_run_function) := case
+  it_state != it_idle & 
+  next(it_state) = it_idle
+  : 
+  it;
+
+  tx_state != tx_idle & 
+  next(tx_state) = tx_idle
+  : 
+  tx;
+
+  td_state != td_idle & 
+  next(td_state) = td_idle
+  : 
+  td;
+
+  TRUE: last_run_function;
+esac;
+
+next(it_state) := case
+  it_state = it_idle & 
+  g.RESET = 0b1_0 & 
+  next(g.RESET) = 0b1_1 &
+  -- TODO personal opinion, the following two don't seem necessary. //J
+  g.open_state = open_set_reset & 
+  next(g.open_state) = open_reset_test &
+  g.turn = software
+  : 
+  it_resetting;
+
+  it_state = it_resetting & 
+  g.turn = HW_init
+  : 
+  it_waiting_hdp;
+
+  it_state = it_waiting_hdp & 
+  next(g.HDP) = 0b2_0 &
+  g.open_state = open_clear_hdp & 
+  next(g.open_state) = open_clear_queue &
+  g.turn = software
+  : 
+  it_idle;
+
+  TRUE : it_state;
+esac;
+
+next(dead) := case
+  -- TODO this should replace many invars right?
+  tx_state = tx_fetching_bd & 
+  (
+	g.HW_MEMORY_OWN[g.HDP] = 0b1_0 | 
+	g.HW_MEMORY_EOQ[g.HDP] = 0b1_1 |
+	g.HW_MEMORY_BL[g.HDP] = 0b2_00 | 
+	TX_BUFFER_OVERFLOW |
+	!TX_BUFFER_INSIDE_RAM
+  ) & 
+  g.turn = HW_tx
+  : 
+  TRUE;
+
+  TRUE : dead;
+esac;
+
+next(tx_state) := case
+  tx_state = tx_idle & 
+  g.HDP = 0b2_00 & 
+  next(g.HDP) != 0b2_00 &
+  g.turn = software
+  : 
+  tx_fetching_bd;
+
+  -- TODO Does this dead-update happen?
+  tx_state = tx_fetching_bd &
+  !(
+	g.HW_MEMORY_OWN[g.HDP] = 0b1_0 | 
+	g.HW_MEMORY_EOQ[g.HDP] = 0b1_1 |
+	g.HW_MEMORY_BL[g.HDP] = 0b2_0 | 
+	TX_BUFFER_OVERFLOW |
+	!TX_BUFFER_INSIDE_RAM
+  ) &
+  g.turn = HW_tx
+  : 
+  tx_reading_memory;
+
+  tx_state = tx_reading_memory & 
+  g.turn = HW_tx
+  : 
+  tx_setting_eoq_or_releasing_bd;
+
+  tx_state = tx_setting_eoq_or_releasing_bd &
+  g.turn = HW_tx
+  : 
   case
-    it_state != it_idle & next(it_state) = it_idle: TRUE;
-    TRUE: it_has_run;
+	g.HW_MEMORY_NDP[g.HDP] = 0b2_00 : tx_releasing_bd;
+	td_state = td_waiting_for_tx : tx_idle;
+	TRUE : tx_fetching_bd;
   esac;
 
-next(last_run_function) := 
-  case
-    it_state != it_idle & next(it_state) = it_idle: it;
-    tx_state != tx_idle & next(tx_state) = tx_idle: tx;
-    td_state != td_idle & next(td_state) = td_idle: td;
-    TRUE: last_run_function;
-  esac;
+  tx_state = tx_releasing_bd & 
+  g.turn = HW_tx
+  : tx_idle;
 
+  TRUE: tx_state; 
+esac;
 
-	
-next(it_state) :=
-  case
-    it_state = it_idle & g.RESET = 0b1_0 & next(g.RESET) = 0b1_1 &
-    g.open_state = open_set_reset & next(g.open_state) = open_reset_test &
-    g.turn = software: it_resetting;
+next(td_state) := case
+  td_state = td_idle & 
+  g.TEARDOWN = 0b1_0 & 
+  next(g.TEARDOWN) = 0b1_1 & 
+  g.turn = software
+  : 
+  td_waiting_for_tx;
 
-    it_state = it_resetting & g.turn = HW_init: it_waiting_hdp;
+  td_state = td_waiting_for_tx & 
+  tx_state = tx_idle & 
+  g.HDP = 0b2_00 & 
+  g.turn = HW_td
+  : 
+  td_idle;
 
-    it_state = it_waiting_hdp & next(g.HDP) = 0b2_0 &
-      g.open_state = open_clear_hdp & next(g.open_state) = open_clear_queue &
-      g.turn = software: it_idle;
+  td_state = td_waiting_for_tx & 
+  tx_state = tx_idle & 
+  g.HDP != 0b2_00 & 
+  g.turn = HW_td
+  : 
+  td_releasing_bd;
 
-    TRUE: it_state;
-  esac;
+  td_state = td_releasing_bd & 
+  g.turn = HW_td
+  : 
+  td_clearing_td;
 
+  td_state = td_clearing_td & 
+  g.turn = HW_td
+  : 
+  td_idle;
 
-next(dead) :=
-  case
-    tx_state = tx_fetching_bd & (g.HW_MEMORY_OWN[g.HDP] = 0b1_0 | g.HW_MEMORY_EOQ[g.HDP] = 0b1_1 |
-			g.HW_MEMORY_BL[g.HDP] = 0b2_00 | TX_BUFFER_OVERFLOW |
-			!TX_BUFFER_INSIDE_RAM) & g.turn = HW_tx: TRUE;
-  TRUE: dead;
-  esac;
-
-
-
-next(tx_state) :=
-  case
-    tx_state = tx_idle & g.HDP = 0b2_00 & next(g.HDP) != 0b2_00 &
-			g.turn = software: tx_fetching_bd;
-
-    tx_state = tx_fetching_bd &
-			!(g.HW_MEMORY_OWN[g.HDP] = 0b1_0 | g.HW_MEMORY_EOQ[g.HDP] = 0b1_1 |
-				g.HW_MEMORY_BL[g.HDP] = 0b2_0 | TX_BUFFER_OVERFLOW |
-				!TX_BUFFER_INSIDE_RAM) &
-			g.turn = HW_tx: tx_reading_memory;
-
-    tx_state = tx_reading_memory & g.turn = HW_tx: tx_setting_eoq_or_releasing_bd;
-
-    tx_state = tx_setting_eoq_or_releasing_bd &
-      g.HW_MEMORY_NDP[g.HDP] = 0b2_00 & g.turn = HW_tx: tx_releasing_bd;
-
-    tx_state = tx_setting_eoq_or_releasing_bd &
-      g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & td_state = td_waiting_for_tx &
-      g.turn = HW_tx: tx_idle;
-
-    tx_state = tx_setting_eoq_or_releasing_bd &
-      g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & td_state != td_waiting_for_tx &
-      g.turn = HW_tx: tx_fetching_bd;
-
-    tx_state = tx_releasing_bd & g.turn = HW_tx: tx_idle;
-
-    TRUE: tx_state; 
-  esac;
-
-
-
-next(td_state) :=
-  case
-    td_state = td_idle & g.TEARDOWN = 0b1_0 & next(g.TEARDOWN) = 0b1_1 & g.turn = software: td_waiting_for_tx;
-    td_state = td_waiting_for_tx & tx_state = tx_idle & g.HDP = 0b2_00 & g.turn = HW_td: td_idle;
-    td_state = td_waiting_for_tx & tx_state = tx_idle & g.HDP != 0b2_00 & g.turn = HW_td: td_releasing_bd;
-    td_state = td_releasing_bd & g.turn = HW_td: td_clearing_td;
-    td_state = td_clearing_td & g.turn = HW_td: td_idle;
-    TRUE: td_state;
-  esac;
+  TRUE: td_state;
+esac;
 
 
 
