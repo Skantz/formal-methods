@@ -574,7 +574,6 @@ next(g.HDP) := case
   TRUE: g.HDP;
 esac;
 
--- TODO LJ from here on Im being less strict with checking
 next(g.TEARDOWN) := case
   d_rive.stop_state = stop_set_teardown & 
   next(d_rive.stop_state) = stop_teardown_test & 
@@ -1111,6 +1110,39 @@ SPEC AG ( (
   
 -----------------
 
+----------------
+-- TEARDOWN
+
+SPEC AG(
+  (d_rive.stop_state = stop_set_teardown) 
+  -> !( 
+    (t_smit.td_state = td_waiting_for_tx & 
+      t_smit.tx_state = tx_idle & 
+      g.HDP = 0b2_00)
+    |
+    (t_smit.td_state = td_clearing_td)
+  ));
+
+SPEC AG(
+  (t_smit.td_state = td_waiting_for_tx & 
+    t_smit.tx_state = tx_idle & 
+    g.HDP = 0b2_00)
+  -> !( 
+    (d_rive.stop_state = stop_set_teardown) 
+    |
+    (t_smit.td_state = td_clearing_td)
+  ));
+
+SPEC AG(
+  (t_smit.td_state = td_clearing_td)
+  -> !( 
+    (d_rive.stop_state = stop_set_teardown) 
+    |
+    (t_smit.td_state = td_waiting_for_tx & 
+      t_smit.tx_state = tx_idle & 
+      g.HDP = 0b2_00)
+  ));
+----------------
 
 --SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
 --SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
