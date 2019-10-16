@@ -928,9 +928,9 @@ SPEC NAME dr_open_can_always_start := AG EF (g.open_state != open_idle );
 SPEC NAME dr_transmit_always_can_start := AG EF (d_rive.transmit_state != transmit_idle );
 SPEC NAME dr_stop_can_always_start := AG EF (d_rive.stop_state != stop_idle);
 
-SPEC NAME dr_open_can_always_end := AG EF (g.open_state = open_idle );
-SPEC NAME dr_open_can_always_end := AG EF (d_rive.transmit_state = transmit_idle );
-SPEC NAME dr_open_can_always_end := AG EF (d_rive.stop_state = stop_idle);
+SPEC AG EF (g.open_state = open_idle );
+SPEC AG EF (d_rive.transmit_state = transmit_idle );
+SPEC AG EF (d_rive.stop_state = stop_idle);
 
 ----------------------------------------------------
 -- These are some extra, used for debugging
