@@ -1057,6 +1057,61 @@ SPEC AG (t_smit.dead != TRUE);
 -- 4.8 C PART
 ----------------------------------------------------------------------------
 
+------------------------
+-- No concurrent writes
+------------------------
+
+-- RESET
+SPEC AG(g.open_state != open_set_reset | t_smit.it_state != it_resetting)
+
+--------------
+-- HDP
+DEFINE HDP_SOFT_CHNG1 := g.open_state = open_reset_test;
+
+DEFINE HDP_SOFT_CHNG2 :=  
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & 
+  g.HDP = 0b2_00;
+
+DEFINE HDP_SOFT_CHNG3 :=  
+  d_rive.transmit_state = transmit_check_mis_queue &
+  g.HW_MEMORY_OWN[g.queue_tail] = 0b1_0 &
+  g.HW_MEMORY_EOQ[g.queue_tail] = 0b1_1 &
+  g.HW_MEMORY_NDP[g.queue_tail] != 0b2_00;
+
+DEFINE HDP_HARD_CHNG1 :=  
+  t_smit.tx_state = tx_setting_eoq_or_releasing_bd &
+  g.HW_MEMORY_NDP[g.HDP] != 0b2_00;
+
+DEFINE HDP_HARD_CHNG2 :=  
+  t_smit.tx_state = tx_releasing_bd;
+
+DEFINE HDP_HARD_CHNG3 :=  
+  t_smit.td_state = td_releasing_bd;
+
+SPEC AG ( (
+    HDP_SOFT_CHNG1 | 
+    HDP_SOFT_CHNG2 | 
+    HDP_SOFT_CHNG3 
+  ) -> !(
+    HDP_HARD_CHNG1 | 
+    HDP_HARD_CHNG2 | 
+    HDP_HARD_CHNG3
+  ));
+
+SPEC AG ( (
+    HDP_HARD_CHNG1 | 
+    HDP_HARD_CHNG2 | 
+    HDP_HARD_CHNG3 
+  ) -> !(
+    HDP_SOFT_CHNG1 | 
+    HDP_SOFT_CHNG2 | 
+    HDP_SOFT_CHNG3
+  ));
+  
+-----------------
+
+
 --SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
 --SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
 -- REPLACEING WITH:
