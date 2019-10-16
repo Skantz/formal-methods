@@ -1147,51 +1147,47 @@ SPEC AG(
 AG(g.turn = software & g.turn != software)
 ----------------
 
---SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
---SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
--- REPLACEING WITH:
-SPEC NAME never_die := AG !(t_smit.dead);
-
---SPEC NAME reach_tx_any := !(EF t_smit.tx_state != tx_idle);
---SPEC NAME reach_td_relbd := !(EF t_smit.td_state = td_releasing_bd);
---SPEC NAME reach_tx_relbd := !(EF t_smit.tx_state = tx_releasing_bd);
---SPEC NAME reach_tx_fetbd := !(EF t_smit.tx_state = tx_fetching_bd);
---SPEC NAME reach_tx_readmem := !(EF t_smit.tx_state = tx_reading_memory );
---SPEC NAME reach_tx_wait := !(EF t_smit.td_state = td_waiting_for_tx);
---SPEC NAME reach_dr_transmit_and_more := !(EF d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !EF(t_smit.dead = TRUE));
 
 
---SPEC NAME reach_stop_teardown_test := !(EF d_rive.stop_state = stop_teardown_test);
---SPEC NAME reach_teardown_clearing_td := !(EF t_smit.td_state = td_clearing_td);
---SPEC NAME reach_transmit_check_mis_queue := !(EF d_rive.transmit_state = transmit_check_mis_queue);
-
-
-
+-- WORKING BUFFER
 
 ----------------
 -- The buffer Length must not be zero
 ----------------
 
-SPEC AG (t_smit.tx_state != tx_idle -> g.length != 0d2_0);
+SPEC AG (t_smit.tx_state != tx_idle ->
+         g.HW_MEMORY_BL[g.HDP] != 0d2_0 &
+         g.HW_MEMORY_BL[g.queue_head] != 0d2_0 &
+         g.HW_MEMORY_BL[g.queue_tail] != 0d2_0);
 
 -- The buffer to transmit must be completely placed in RAM. RAM starts at 1, ends at 2, inclusive.
 
-
---  g.HW_MEMORY_NDP: array 0..3 of word[2];
---  g.HW_MEMORY_BP: array 0..3 of word[2];
---  g.HW_MEMORY_BL: array 0..3 of word[2];
---  g.HW_MEMORY_OWN: array 0..3 of word[1];
---  g.HW_MEMORY_EOQ: array 0..3 of word[1];
+SPEC AG(t_smit.tx_state != tx_idle ->
+   t_smit.TX_BUFFER_INSIDE_RAM)
 
 
 --The buffer must not overflow w.r.t. unsigned 2**2 arithmetic
---(See BD/BL for descriptions of memory)
 
+SPEC AG(t_smit.tx_state != tx_idle ->
+   !t_smit.TX_BUFFER_OVERFLOW)
 
 --The ownership bit must be set
+SPEC AG(t_smit.tx_state != tx_idle ->
+   g.HW_MEMORY_OWN[g.HDP] = 0b1_1 &
+   g.HW_MEMORY_OWN[g.queue_head] = 0b1_1 &
+   g.HW_MEMORY_OWN[g.queue_tail] = 0b1_1);
 
 --The EOQ bit must be cleared
 
+SPEC AG(t_smit.td_state = td_releasing_bd & g.turn = HW_td ->
+   AX(g.HW_MEMORY_EOQ[g.HDP] = 0d1_0));
 
+-- NO MISQUEUE
+
+SPEC AG(d_rive.transmit_state != transmit_idle | t_smit.tx_state != tx_idle ->
+ !(g.HW_MEMORY_OWN[g.queue_tail] = 0b1_0 &
+  g.HW_MEMORY_EOQ[g.queue_tail] = 0b1_1 &
+  g.HW_MEMORY_NDP[g.queue_tail] != 0b2_00)
+);
 
 
