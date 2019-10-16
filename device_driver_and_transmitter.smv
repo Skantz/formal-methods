@@ -469,30 +469,30 @@ ASSIGN
   --init(g.length) := 0d2_00;
   --init(g.queue_tail) := 0d2_00;
   --init(g.queue_head) := 0d2_00;
-  --init(g.HW_MEMORY_OWN[0]) := 0d1_00;
-  --init(g.HW_MEMORY_OWN[1]) := 0d1_00;
-  --init(g.HW_MEMORY_OWN[2]) := 0d1_00;
-  --init(g.HW_MEMORY_OWN[3]) := 0d1_00;
+  init(g.HW_MEMORY_OWN[0]) := 0d1_00;
+  init(g.HW_MEMORY_OWN[1]) := 0d1_00;
+  init(g.HW_MEMORY_OWN[2]) := 0d1_00;
+  init(g.HW_MEMORY_OWN[3]) := 0d1_00;
 
-  --init(g.HW_MEMORY_NDP[0]) := 0d2_00;
-  --init(g.HW_MEMORY_NDP[1]) := 0d2_00;
-  --init(g.HW_MEMORY_NDP[2]) := 0d2_00;
-  --init(g.HW_MEMORY_NDP[3]) := 0d2_00;
+  init(g.HW_MEMORY_NDP[0]) := 0d2_00;
+  init(g.HW_MEMORY_NDP[1]) := 0d2_00;
+  init(g.HW_MEMORY_NDP[2]) := 0d2_00;
+  init(g.HW_MEMORY_NDP[3]) := 0d2_00;
 
-  --init(g.HW_MEMORY_BP[0]) := 0d2_00;
-  --init(g.HW_MEMORY_BP[1]) := 0d2_00;
-  --init(g.HW_MEMORY_BP[2]) := 0d2_00;
-  --init(g.HW_MEMORY_BP[3]) := 0d2_00;
+  init(g.HW_MEMORY_BP[0]) := 0d2_01;
+  init(g.HW_MEMORY_BP[1]) := 0d2_01;
+  init(g.HW_MEMORY_BP[2]) := 0d2_01;
+  init(g.HW_MEMORY_BP[3]) := 0d2_01;
 
-  --init(g.HW_MEMORY_BL[0]) := 0d2_00;
-  --init(g.HW_MEMORY_BL[1]) := 0d2_00;
-  --init(g.HW_MEMORY_BL[2]) := 0d2_00;
-  --init(g.HW_MEMORY_BL[3]) := 0d2_00;
+  init(g.HW_MEMORY_BL[0]) := 0d2_01;
+  init(g.HW_MEMORY_BL[1]) := 0d2_01;
+  init(g.HW_MEMORY_BL[2]) := 0d2_01;
+  init(g.HW_MEMORY_BL[3]) := 0d2_01;
   
-  --init(g.HW_MEMORY_EOQ[0]) := 0d1_00;
-  --init(g.HW_MEMORY_EOQ[1]) := 0d1_00;
-  --init(g.HW_MEMORY_EOQ[2]) := 0d1_00;
-  --init(g.HW_MEMORY_EOQ[3]) := 0d1_00;
+  init(g.HW_MEMORY_EOQ[0]) := 0d1_00;
+  init(g.HW_MEMORY_EOQ[1]) := 0d1_00;
+  init(g.HW_MEMORY_EOQ[2]) := 0d1_00;
+  init(g.HW_MEMORY_EOQ[3]) := 0d1_00;
 
 next(g.RESET) := case
   g.open_state = open_set_reset & 
