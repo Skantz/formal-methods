@@ -1143,6 +1143,9 @@ SPEC AG(
       g.HDP = 0b2_00)
   ));
 ----------------
+-- Rest... (ironic)
+AG(g.turn = software & g.turn != software)
+----------------
 
 --SPEC AG!(t_smit.TX_BUFFER_OVERFLOW);
 --SPEC AG!(d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL)
