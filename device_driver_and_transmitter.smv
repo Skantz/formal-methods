@@ -699,53 +699,38 @@ BP_MEM_TRANSITION(3)
 
 #undef BP_MEM_TRANSITION 
 
------------- ------------ ------------ ------------ ------------ ------------ 
--- TODO I wanst to replace this with a TRANS
------------- ------------ ------------ ------------ ------------ ------------ 
-next(g.HW_MEMORY_NDP[0]) := case
-  g.queue_tail = 0d2_0 & 
-  d_rive.transmit_state = transmit_updated_new_bd & 
-  g.turn = software
-  : 
-  g.new_bd; 
 
-  g.new_bd = 0d2_0 & 
-  d_rive.transmit_state = transmit_updated_new_bd & 
-  g.turn = software
-  : 
-  g.new_bd;
+#define NDP_MEM_TRANSITION(index)                                                  \
+next(g.HW_MEMORY_NDP[index]) := case                                               \
+  g.queue_tail = uwconst(index, 2) &                                               \
+  d_rive.transmit_state = transmit_updated_new_bd &                                \
+  g.turn = software                                                                \
+  :                                                                                \
+  g.new_bd;                                                                        \
+                                                                                   \
+  g.new_bd = uwconst(index, 2) &                                                   \
+  d_rive.transmit_state = transmit_updated_new_bd &                                \
+  g.turn = software                                                                \
+  :                                                                                \
+  g.new_bd;                                                                        \
+                                                                                   \
+  index = 1 &                                                                      \
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &    \
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &                                      \
+  g.HDP = 0b2_00 &                                                                 \
+  g.turn = software                                                                \
+  :                                                                                \
+  0b2_00;                                                                          \
+                                                                                   \
+  TRUE: g.HW_MEMORY_NDP[index];                                                    \
+esac;                                                                                                   
 
-  TRUE: g.HW_MEMORY_NDP[0];
-esac;
+NDP_MEM_TRANSITION(0)
+NDP_MEM_TRANSITION(1)
+NDP_MEM_TRANSITION(2)
+NDP_MEM_TRANSITION(3)
 
-next(g.HW_MEMORY_NDP[g.HW_MEMORY_START]) := case
-
-    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-      !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: 0b2_00;
-
-    g.queue_tail = 0d2_01 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
-    g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
-    TRUE: g.HW_MEMORY_NDP[g.HW_MEMORY_START];
-  esac;
-
-
-next(g.HW_MEMORY_NDP[2]) := case
-    g.queue_tail = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
-    g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
-    TRUE: g.HW_MEMORY_NDP[2];
-  esac;
-
-
-next(g.HW_MEMORY_NDP[3]) := case
-    g.queue_tail = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
-    g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
-    TRUE: g.HW_MEMORY_NDP[3];
-  esac;
------------- ------------ ------------ ------------ ------------ ------------ 
-
-
-
-
+#undef NDP_MEM_TRANSITION 
 
 ------------ ------------ ------------ ------------ ------------ ------------ 
 -- TODO I wanst to replace this with a TRANS
