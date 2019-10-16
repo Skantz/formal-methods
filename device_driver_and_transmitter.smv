@@ -11,9 +11,7 @@ VAR
   open_state: {
 	open_idle, 
 	open_set_reset, 
-	open_reset_test, 
-	open_clear_hdp, 
-	open_clear_queue
+	open_reset_test
   };
   turn: {
 	software, 
@@ -334,8 +332,8 @@ next(it_state) := case
 
   it_state = it_waiting_hdp & 
   next(g.HDP) = 0b2_0 &
-  g.open_state = open_clear_hdp & 
-  next(g.open_state) = open_clear_queue &
+  g.open_state = open_reset_test & 
+  next(g.open_state) = open_idle &
   g.turn = software
   : 
   it_idle;
@@ -1054,15 +1052,15 @@ SPEC AG(g.TEARDOWN = 0b1_1 -> d_rive.stop_state != stop_idle);
 -- REPLACEING WITH:
 SPEC NAME never_die := AG !(t_smit.dead);
 
-SPEC NAME reach_tx_any := !(EF t_smit.tx_state != tx_idle);
-SPEC NAME reach_td_relbd := !(EF t_smit.td_state = td_releasing_bd);
-SPEC NAME reach_tx_relbd := !(EF t_smit.tx_state = tx_releasing_bd);
-SPEC NAME reach_tx_fetbd := !(EF t_smit.tx_state = tx_fetching_bd);
-SPEC NAME reach_tx_readmem := !(EF t_smit.tx_state = tx_reading_memory );
-SPEC NAME reach_tx_wait := !(EF t_smit.td_state = td_waiting_for_tx);
-SPEC NAME reach_dr_transmit_and_more := !(EF d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !EF(t_smit.dead = TRUE));
+--SPEC NAME reach_tx_any := !(EF t_smit.tx_state != tx_idle);
+--SPEC NAME reach_td_relbd := !(EF t_smit.td_state = td_releasing_bd);
+--SPEC NAME reach_tx_relbd := !(EF t_smit.tx_state = tx_releasing_bd);
+--SPEC NAME reach_tx_fetbd := !(EF t_smit.tx_state = tx_fetching_bd);
+--SPEC NAME reach_tx_readmem := !(EF t_smit.tx_state = tx_reading_memory );
+--SPEC NAME reach_tx_wait := !(EF t_smit.td_state = td_waiting_for_tx);
+--SPEC NAME reach_dr_transmit_and_more := !(EF d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !EF(t_smit.dead = TRUE));
 
 
-SPEC NAME reach_stop_teardown_test := !(EF d_rive.stop_state = stop_teardown_test);
-SPEC NAME reach_teardown_clearing_td := !(EF t_smit.td_state = td_clearing_td);
-SPEC NAME reach_transmit_check_mis_queue := !(EF d_rive.transmit_state = transmit_check_mis_queue);
+--SPEC NAME reach_stop_teardown_test := !(EF d_rive.stop_state = stop_teardown_test);
+--SPEC NAME reach_teardown_clearing_td := !(EF t_smit.td_state = td_clearing_td);
+--SPEC NAME reach_transmit_check_mis_queue := !(EF d_rive.transmit_state = transmit_check_mis_queue);
