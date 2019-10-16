@@ -529,46 +529,202 @@ next(g.new_bd) := case
 	g.queue_tail = g.HW_MEMORY_END : g.HW_MEMORY_START;
 	TRUE : g.queue_tail + 0b2_01;
   esac;
+
+  -- TODO addition LJ
+  TRUE: g.new_bd;
 esac;
 
-next(g.HDP) :=
-  case
-    g.open_state = open_reset_test & next(g.open_state) = open_idle &
-    g.turn = software: 0b2_00;
+next(g.HDP) := case
+  g.open_state = open_reset_test & 
+  next(g.open_state) = open_idle &
+  g.turn = software
+  : 
+  0b2_00;
 
-    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-      !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: g.HW_MEMORY_START;
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & 
+  g.HDP = 0b2_00 & 
+  g.turn = software
+  : 
+  g.HW_MEMORY_START;
 
-    d_rive.transmit_state = transmit_check_mis_queue &
- 			g.HW_MEMORY_OWN[g.queue_tail] = 0b1_0 &
- 			g.HW_MEMORY_EOQ[g.queue_tail] = 0b1_1 &
- 			g.HW_MEMORY_NDP[g.queue_tail] != 0b2_00 & g.turn = software:
- 			g.new_bd;
+  d_rive.transmit_state = transmit_check_mis_queue &
+  g.HW_MEMORY_OWN[g.queue_tail] = 0b1_0 &
+  g.HW_MEMORY_EOQ[g.queue_tail] = 0b1_1 &
+  g.HW_MEMORY_NDP[g.queue_tail] != 0b2_00 & 
+  g.turn = software
+  :
+  g.new_bd;
 
-    t_smit.tx_state = tx_setting_eoq_or_releasing_bd &
-      g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & g.turn = HW_tx: g.HW_MEMORY_NDP[g.HDP];
+  t_smit.tx_state = tx_setting_eoq_or_releasing_bd &
+  g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & 
+  g.turn = HW_tx
+  : 
+  g.HW_MEMORY_NDP[g.HDP];
 
-    -- Where did this come from?
-    t_smit.tx_state = tx_releasing_bd & g.turn = HW_tx:
-      0b2_00;
+  t_smit.tx_state = tx_releasing_bd & 
+  g.turn = HW_tx
+  :
+  0b2_00;
 
-    t_smit.td_state = td_releasing_bd & g.turn = HW_td:
-      0b2_00;
+  t_smit.td_state = td_releasing_bd & 
+  g.turn = HW_td
+  :
+  0b2_00;
 
-    TRUE: g.HDP;
+  TRUE: g.HDP;
+esac;
+
+-- TODO LJ from here on I'm being less strict with checking
+next(g.TEARDOWN) := case
+  d_rive.stop_state = stop_set_teardown & 
+  next(d_rive.stop_state) = stop_teardown_test & 
+  g.turn = software
+  : 
+  0b1_1;
+    
+  t_smit.td_state = td_waiting_for_tx & 
+  t_smit.tx_state = tx_idle & 
+  g.HDP = 0b2_00 & 
+  g.turn = HW_td
+  : 
+  0b1_0;
+
+  t_smit.td_state = td_clearing_td & 
+  g.turn = HW_td
+  : 
+  0b1_0;
+
+  TRUE: g.TEARDOWN;
+esac;
+
+next(g.queue_head) := case
+  g.open_state = open_reset_test &
+  next(g.open_state) = open_idle &
+  g.turn = software
+  : 
+  0b2_00;
+
+  d_rive.transmit_state = transmit_update_queue &
+  g.queue_head != 0d2_0 &
+  g.HW_MEMORY_OWN[g.queue_head] = 0b1_0 &
+  g.turn = software
+  : 
+  g.HW_MEMORY_NDP[g.queue_head];
+
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
+  g.HDP = 0b2_00 &
+  g.turn = software
+  : 
+  g.HW_MEMORY_START;
+
+  d_rive.transmit_state = transmit_check_mis_queue &
+  g.HW_MEMORY_OWN[g.queue_tail] = 0b1_0 &
+  g.HW_MEMORY_EOQ[g.queue_tail] = 0b1_1 &
+  g.HW_MEMORY_NDP[g.queue_tail] != 0b2_00 &
+  g.turn = software
+  : g.new_bd;
+
+  d_rive.stop_state = stop_teardown_test &
+  next(d_rive.stop_state) = stop_idle &
+  g.turn = software
+  : 
+  0b2_00;
+
+  TRUE: g.queue_head;
+esac;
+
+next(g.queue_tail) := case
+  d_rive.g.open_state = open_reset_test &
+  next(g.open_state) = open_idle &
+  g.turn = software
+  : 
+  0b2_00;
+
+  d_rive.transmit_state = transmit_update_queue &
+  !(
+	g.queue_head != 0d2_0 & 
+	g.HW_MEMORY_OWN[g.queue_head] = 0b1_0
+  ) &
+  g.queue_head = 0b2_00 & 
+  g.turn = software
+  : 
+  0b2_00;
+
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
+  g.HDP = 0b2_00 & 
+  g.turn = software
+  : 
+  g.HW_MEMORY_START;
+
+  d_rive.transmit_state = transmit_check_mis_queue &
+  g.turn = software
+  : 
+  g.new_bd;
+
+  --CHANGE: This will never happen because stop update g.queue_ doesn't exist. Removing.
+  --stop_state = stop_update_queue &
+    --next(stop_state) = stop_idle &
+    --g.turn = software: 0b2_00;
+
+  TRUE: g.queue_tail;
+esac;
+
+
+------------ ------------ ------------ ------------ ------------ ------------ 
+-- TODO I wanst to replace this with a TRANS
+------------ ------------ ------------ ------------ ------------ ------------ 
+next(g.HW_MEMORY_BP[0]) := case
+  g.new_bd = 0d2_0 & 
+  d_rive.transmit_state = transmit_updated_new_bd & 
+  g.turn = software
+  : 
+  g.pa;
+
+  TRUE: g.HW_MEMORY_BP[0];
+esac;
+
+next(g.HW_MEMORY_BP[1]) := case
+    --special case for g.HW_MEMORY_START (1)
+    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: g.pa;
+    g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
+    TRUE: g.HW_MEMORY_BP[1];
+esac;
+
+next(g.HW_MEMORY_BP[2]) := case
+    g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
+    TRUE: g.HW_MEMORY_BP[2];
   esac;
 
+next(g.HW_MEMORY_BP[3]) := case    
+    g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
+    TRUE: g.HW_MEMORY_BP[3];
+  esac;
+------------ ------------ ------------ ------------ ------------ ------------ 
 
 
-next(g.HW_MEMORY_NDP[0]) :=
-  case
-  g.queue_tail = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd; 
-  g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
+
+------------ ------------ ------------ ------------ ------------ ------------ 
+-- TODO I wanst to replace this with a TRANS
+------------ ------------ ------------ ------------ ------------ ------------ 
+next(g.HW_MEMORY_NDP[0]) := case
+  g.queue_tail = 0d2_0 & 
+  d_rive.transmit_state = transmit_updated_new_bd & 
+  g.turn = software
+  : 
+  g.new_bd; 
+
+  g.new_bd = 0d2_0 & 
+  d_rive.transmit_state = transmit_updated_new_bd & 
+  g.turn = software
+  : 
+  g.new_bd;
+
   TRUE: g.HW_MEMORY_NDP[0];
-  esac;
+esac;
 
-next(g.HW_MEMORY_NDP[g.HW_MEMORY_START]) :=
-  case
+next(g.HW_MEMORY_NDP[g.HW_MEMORY_START]) := case
 
     d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
       !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: 0b2_00;
@@ -579,31 +735,33 @@ next(g.HW_MEMORY_NDP[g.HW_MEMORY_START]) :=
   esac;
 
 
-next(g.HW_MEMORY_NDP[2]) :=
-  case
+next(g.HW_MEMORY_NDP[2]) := case
     g.queue_tail = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
     g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
     TRUE: g.HW_MEMORY_NDP[2];
   esac;
 
 
-next(g.HW_MEMORY_NDP[3]) :=
-  case
+next(g.HW_MEMORY_NDP[3]) := case
     g.queue_tail = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b2_00;
     g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.new_bd;
     TRUE: g.HW_MEMORY_NDP[3];
   esac;
+------------ ------------ ------------ ------------ ------------ ------------ 
 
 
 
-next(g.HW_MEMORY_BL[0]) :=
-  case g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
+
+
+------------ ------------ ------------ ------------ ------------ ------------ 
+-- TODO I wanst to replace this with a TRANS
+------------ ------------ ------------ ------------ ------------ ------------ 
+next(g.HW_MEMORY_BL[0]) := case g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
     TRUE: g.HW_MEMORY_BL[0];
  esac; 
 
 
-next(g.HW_MEMORY_BL[1]) :=
-  case
+next(g.HW_MEMORY_BL[1]) := case
     d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
       !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
       g.HDP = 0b2_00 &
@@ -613,20 +771,21 @@ next(g.HW_MEMORY_BL[1]) :=
     TRUE: g.HW_MEMORY_BL[1];
   esac;
 
-next(g.HW_MEMORY_BL[2]) :=
-  case g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
+next(g.HW_MEMORY_BL[2]) := case g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
     TRUE: g.HW_MEMORY_BL[2];
  esac;
 
-next(g.HW_MEMORY_BL[3]) :=
-  case g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
+next(g.HW_MEMORY_BL[3]) := case g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
     TRUE: g.HW_MEMORY_BL[3];
  esac;
+------------ ------------ ------------ ------------ ------------ ------------ 
 
 
 
-next(g.HW_MEMORY_OWN[0]) :=
-      case g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
+------------ ------------ ------------ ------------ ------------ ------------ 
+-- TODO I wanst to replace this with a TRANS
+------------ ------------ ------------ ------------ ------------ ------------ 
+next(g.HW_MEMORY_OWN[0]) := case g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
 
        g.HDP = 0d2_0 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & g.turn = HW_tx: 0b1_0;
        g.HDP = 0d2_0 & t_smit.tx_state = tx_releasing_bd & g.turn = HW_tx: 0b1_0;
@@ -637,8 +796,7 @@ next(g.HW_MEMORY_OWN[0]) :=
   esac;
 
 
-next(g.HW_MEMORY_OWN[1]) :=
-  case
+next(g.HW_MEMORY_OWN[1]) := case
        d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: 0b1_1;
 
        g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
@@ -652,8 +810,7 @@ next(g.HW_MEMORY_OWN[1]) :=
 
 
 
-next(g.HW_MEMORY_OWN[2]) :=
-    case g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
+next(g.HW_MEMORY_OWN[2]) := case g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
 
     -- TRANSMITTER
 
@@ -665,8 +822,7 @@ next(g.HW_MEMORY_OWN[2]) :=
   esac;
 
 
-next(g.HW_MEMORY_OWN[3]) :=
-    case
+next(g.HW_MEMORY_OWN[3]) := case
       g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: 0b1_1;
 
        g.HDP = 0d2_3 & t_smit.tx_state = tx_setting_eoq_or_releasing_bd & g.HW_MEMORY_NDP[g.HDP] != 0b2_00 & g.turn = HW_tx: 0b1_0;
@@ -675,11 +831,14 @@ next(g.HW_MEMORY_OWN[3]) :=
 
     TRUE: g.HW_MEMORY_OWN[3];
   esac;
+------------ ------------ ------------ ------------ ------------ ------------ 
 
 
 
-next(g.HW_MEMORY_EOQ[0]) :=
- case
+------------ ------------ ------------ ------------ ------------ ------------ 
+-- TODO I wanst to replace this with a TRANS
+------------ ------------ ------------ ------------ ------------ ------------ 
+next(g.HW_MEMORY_EOQ[0]) := case
    g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software:  0b1_0;
 
 
@@ -692,8 +851,7 @@ next(g.HW_MEMORY_EOQ[0]) :=
 
 
 
-next(g.HW_MEMORY_EOQ[1]) :=
- case
+next(g.HW_MEMORY_EOQ[1]) := case
 
    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: 0b1_0;
 
@@ -706,8 +864,7 @@ next(g.HW_MEMORY_EOQ[1]) :=
   TRUE: g.HW_MEMORY_EOQ[1];
   esac;
 
-next(g.HW_MEMORY_EOQ[2]) :=
-  case
+next(g.HW_MEMORY_EOQ[2]) := case
 
    g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software:  0b1_0;
 
@@ -718,8 +875,7 @@ next(g.HW_MEMORY_EOQ[2]) :=
   esac;
 
 
-next(g.HW_MEMORY_EOQ[3]) :=
- case
+next(g.HW_MEMORY_EOQ[3]) := case
 
    g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software:  0b1_0;
 
@@ -732,94 +888,8 @@ next(g.HW_MEMORY_EOQ[3]) :=
 
   TRUE: g.HW_MEMORY_EOQ[3];
   esac;
+------------ ------------ ------------ ------------ ------------ ------------ 
 
-
-
-next(g.TEARDOWN) :=
-  case
-    d_rive.stop_state = stop_set_teardown & next(d_rive.stop_state) = stop_teardown_test & g.turn = software: 0b1_1;
-    
-   t_smit.td_state = td_waiting_for_tx & t_smit.tx_state = tx_idle & g.HDP = 0b2_00 & g.turn = HW_td: 0b1_0;
-   t_smit.td_state = td_clearing_td & g.turn = HW_td: 0b1_0;
-   TRUE: g.TEARDOWN;
-  esac;
-
-
-next(g.HW_MEMORY_BP[0]) :=
-  case
-    g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
-    TRUE: g.HW_MEMORY_BP[0];
-  esac;
-
-next(g.HW_MEMORY_BP[1]) :=
-  case
-    --special case for g.HW_MEMORY_START (1)
-    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & g.HDP = 0b2_00 & g.turn = software: g.pa;
-    g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
-    TRUE: g.HW_MEMORY_BP[1];
-  esac;
-
-next(g.HW_MEMORY_BP[2]) :=
-  case
-    g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
-    TRUE: g.HW_MEMORY_BP[2];
-  esac;
-
-next(g.HW_MEMORY_BP[3]) :=
-  case    
-    g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.pa;
-    TRUE: g.HW_MEMORY_BP[3];
-  esac;
-
-next(g.queue_head) :=
-  case
-    g.open_state = open_reset_test &
-      next(g.open_state) = open_idle &
-      g.turn = software: 0b2_00;
-
-    d_rive.transmit_state = transmit_update_queue &
-      g.queue_head != 0d2_0 &
-      g.HW_MEMORY_OWN[g.queue_head] = 0b1_0 &
-      g.turn = software: g.HW_MEMORY_NDP[g.queue_head];
-
-    !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
-      g.HDP = 0b2_00 &
-      g.turn = software: g.HW_MEMORY_START;
-
-    d_rive.transmit_state = transmit_check_mis_queue &
-                        g.HW_MEMORY_OWN[g.queue_tail] = 0b1_0 &
-                        g.HW_MEMORY_EOQ[g.queue_tail] = 0b1_1 &
-                        g.HW_MEMORY_NDP[g.queue_tail] != 0b2_00 &
-                        g.turn = software: g.new_bd;
-
-    d_rive.stop_state = stop_teardown_test &
-      next(d_rive.stop_state) = stop_idle &
-      g.turn = software: 0b2_00;
-
-  TRUE: g.queue_head;
-  esac;
-
-
-
-next(g.queue_tail) :=
-  case
-  d_rive.g.open_state = open_reset_test &
-    next(g.open_state) = open_idle &
-    g.turn = software: 0b2_00;
-  d_rive.transmit_state = transmit_update_queue &
-    !(g.queue_head != 0d2_0 & g.HW_MEMORY_OWN[g.queue_head] = 0b1_0) &
-    g.queue_head = 0b2_00 & g.turn = software: 0b2_00;
-  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-    !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
-    g.HDP = 0b2_00 & g.turn = software: g.HW_MEMORY_START;
-  d_rive.transmit_state = transmit_check_mis_queue &
-    g.turn = software: g.new_bd;
-  --CHANGE: This will never happen because stop update g.queue_ doesn't exist. Removing.
-  --stop_state = stop_update_queue &
-    --next(stop_state) = stop_idle &
-    --g.turn = software: 0b2_00;
-  TRUE: g.queue_tail;
-  esac;
 
 
 
