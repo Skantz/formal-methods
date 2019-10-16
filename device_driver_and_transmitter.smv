@@ -947,17 +947,17 @@ SPEC NAME stop_can_start := EF (d_rive.stop_state != stop_idle );
 -- TRANSMIT DRIVER
 
 --Easy ones: (actually harder)
-SPEC EF(t_smit.it_state = it_resetting);
-SPEC EF(t_smit.it_state = it_waiting_hdp);
+--SPEC EF(t_smit.it_state = it_resetting);
+--SPEC EF(t_smit.it_state = it_waiting_hdp);
 
-SPEC EF(t_smit.td_state = td_waiting_for_tx);
-SPEC EF(t_smit.td_state = td_releasing_bd);
-SPEC EF(t_smit.td_state = td_clearing_td);
+--SPEC EF(t_smit.td_state = td_waiting_for_tx);
+--SPEC EF(t_smit.td_state = td_releasing_bd);
+--SPEC EF(t_smit.td_state = td_clearing_td);
 
-SPEC NAME tx_can_start := EF(t_smit.tx_state = tx_fetching_bd);
-SPEC EF(t_smit.tx_state = tx_reading_memory);
-SPEC EF(t_smit.tx_state = tx_releasing_bd);
-SPEC EF(t_smit.tx_state = td_waiting_for_tx);
+--SPEC NAME tx_can_start := EF(t_smit.tx_state = tx_fetching_bd);
+--SPEC EF(t_smit.tx_state = tx_reading_memory);
+--SPEC EF(t_smit.tx_state = tx_releasing_bd);
+--SPEC EF(t_smit.tx_state = td_waiting_for_tx);
 
 --Global ones:
 
@@ -983,15 +983,13 @@ SPEC AG EF (t_smit.td_state = td_idle );
 
 --TRANSMISSION
 -- a
-SPEC EF(t_smit.tx_state != tx_idle);
+--SPEC EF(t_smit.tx_state != tx_idle);
 
 -- The buffer Length must not be zero
 SPEC AG (t_smit.tx_state != tx_idle -> g.length != 0d2_0);
 
 -- The buffer to transmit must be completely placed in RAM. RAM starts at 1, ends at 2, inclusive.
 
-SPEC AG (t_smit.tx_state != tx_idle -> 
-         g.HW_MEMORY_BP[0] != 0d2_0 & g.HW_MEMORY_BP[1] != 0d2_0 & g.HW_MEMORY_BP[2] != 0d2_0 & g.HW_MEMORY_BP[3] != 0d2_0 );
 
 --  g.HW_MEMORY_NDP: array 0..3 of word[2];
 --  g.HW_MEMORY_BP: array 0..3 of word[2];
