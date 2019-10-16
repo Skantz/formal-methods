@@ -750,29 +750,32 @@ next(g.HW_MEMORY_NDP[3]) := case
 ------------ ------------ ------------ ------------ ------------ ------------ 
 -- TODO I wanst to replace this with a TRANS
 ------------ ------------ ------------ ------------ ------------ ------------ 
-next(g.HW_MEMORY_BL[0]) := case g.new_bd = 0d2_0 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
-    TRUE: g.HW_MEMORY_BL[0];
- esac; 
+#define BL_TRANSITION(index)            \
+next(g.HW_MEMORY_BL[index]) := case     \
+  g.new_bd = uwconst(index, 2) &        \
+  d_rive.transmit_state = transmit_updated_new_bd &     \
+  g.turn = software:                                    \
+    g.length;                                           \
+                                                        \
+  g.turn = software &                                   \
+  d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &   \
+  !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &                		 	  \
+  g.HDP = 0b2_00:                                         	   	  	  \
+    g.length;                                             	       	          \
+                                                              			  \
+  TRUE: g.HW_MEMORY_BL[index];                                 			  \
+esac;
+
+BL_TRANSITION(0)
+BL_TRANSITION(1)
+BL_TRANSITION(2)
+BL_TRANSITION(3) 
 
 
-next(g.HW_MEMORY_BL[1]) := case
-    d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full &
-      !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL &
-      g.HDP = 0b2_00 &
-      g.turn = software: g.length;
-
-    g.new_bd = 0d2_1 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
-    TRUE: g.HW_MEMORY_BL[1];
-  esac;
-
-next(g.HW_MEMORY_BL[2]) := case g.new_bd = 0d2_2 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
-    TRUE: g.HW_MEMORY_BL[2];
- esac;
-
-next(g.HW_MEMORY_BL[3]) := case g.new_bd = 0d2_3 & d_rive.transmit_state = transmit_updated_new_bd & g.turn = software: g.length;
-    TRUE: g.HW_MEMORY_BL[3];
- esac;
 ------------ ------------ ------------ ------------ ------------ ------------ 
+
+
+
 
 
 
