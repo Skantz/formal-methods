@@ -949,7 +949,7 @@ SPEC EF(t_smit.td_state = td_waiting_for_tx);
 SPEC EF(t_smit.td_state = td_releasing_bd);
 SPEC EF(t_smit.td_state = td_clearing_td);
 
-SPEC EF(t_smit.tx_state = tx_fetching_bd);
+SPEC NAME tx_can_start := EF(t_smit.tx_state = tx_fetching_bd);
 SPEC EF(t_smit.tx_state = tx_reading_memory);
 SPEC EF(t_smit.tx_state = tx_releasing_bd);
 SPEC EF(t_smit.tx_state = td_waiting_for_tx);
@@ -1050,11 +1050,10 @@ SPEC AG(g.TEARDOWN = 0b1_1 -> d_rive.stop_state != stop_idle);
 -- REPLACEING WITH:
 SPEC NAME never_die := AG !(t_smit.dead);
 
-SPEC !(EF t_smit.tx_state != tx_idle);
-SPEC !(EF t_smit.td_state = td_releasing_bd);
-SPEC !(EF t_smit.tx_state = tx_fetching_bd);
-SPEC !(EF t_smit.tx_state = tx_reading_memory );
-SPEC !(EF t_smit.tx_state = tx_releasing_bd);
-SPEC !(EF t_smit.tx_state = td_waiting_for_tx);
-SPEC !((EF t_smit.tx_state != tx_idle));
-SPEC !(EF d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !EF(t_smit.dead = TRUE));
+SPEC NAME reach_tx_any := !(EF t_smit.tx_state != tx_idle);
+SPEC NAME reach_td_relbd := !(EF t_smit.td_state = td_releasing_bd);
+SPEC NAME reach_tx_relbd := !(EF t_smit.tx_state = tx_releasing_bd);
+SPEC NAME reach_tx_fetbd := !(EF t_smit.tx_state = tx_fetching_bd);
+SPEC NAME reach_tx_readmem := !(EF t_smit.tx_state = tx_reading_memory );
+SPEC NAME reach_tx_wait := !(EF t_smit.tx_state = td_waiting_for_tx);
+SPEC NAME reach_dr_transmit_and_more := !(EF d_rive.transmit_state = transmit_bad_buffer_or_queue_full_or_not_queue_full & !d_rive.TRANSMIT_BAD_BUFFER_OR_QUEUE_FULL & !EF(t_smit.dead = TRUE));
